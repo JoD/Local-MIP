@@ -157,7 +157,7 @@ void LocalMIP::ApplyMove(
   localVar.nowValue += _delta;
   if (DEBUG)
     printf("varType: %d; varIdx: %-10ld; delta: %-10lf; ",
-           modelVar.type, _varIdx, _delta);
+           static_cast<int>(modelVar.type), _varIdx, _delta);
   for (size_t termIdx = 0; termIdx < modelVar.termNum; ++termIdx)
   {
     size_t conIdx = modelVar.conIdxSet[termIdx];

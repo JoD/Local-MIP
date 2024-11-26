@@ -55,11 +55,13 @@ bool LocalMIP::SatTightMove(
       auto &localVar = localVarUtil.GetVar(varIdx);
       auto &modelVar = modelVarUtil->GetVar(varIdx);
       Value delta;
-      if (!TightDelta(localCon, modelCon, termIdx, delta))
-        if (modelCon.coeffSet[termIdx] > 0)
+      if (!TightDelta(localCon, modelCon, termIdx, delta)){
+        if (modelCon.coeffSet[termIdx] > 0){
           delta = modelVar.upperBound - localVar.nowValue;
-        else
+        }else{
           delta = modelVar.lowerBound - localVar.nowValue;
+        }
+      }
       if (delta < 0 && curStep < localVar.allowDecStep ||
           delta > 0 && curStep < localVar.allowIncStep)
         continue;

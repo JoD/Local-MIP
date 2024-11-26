@@ -40,8 +40,8 @@ void paras::print_change() {
            "Name", "Type", "Now", "Default", "Comment");
 
 #define PARA(N, T, S, M, D, L, H, C) \
-    if (!strcmp(#T, "int")) printf("c %-20s\t %-10s\t %-10d\t %-10s\t %s\n", (#N), (#T), N, (#D), (C)); \
-    else printf("c %-20s\t %-10s\t %-10f\t %-10s\t %s\n", (#N), (#T), N, (#D), (C)); 
+    if (!strcmp(#T, "int")) printf("c %-20s\t %-10s\t %-10f\t %-10s\t %s\n", (#N), (#T), static_cast<double>(N), (#D), (C)); \
+    else printf("c %-20s\t %-10s\t %-10f\t %-10s\t %s\n", (#N), (#T), static_cast<double>(N), (#D), (C));
     PARAS
 #undef PARA
 

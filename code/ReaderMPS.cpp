@@ -90,11 +90,13 @@ void ReaderMPS::Read(
     if (readLine[0] == 'C')
       break;
     IssSetup();
-    if (!(iss >> conType >> conName))
-      if (!IsBlank(readLine))
+    if (!(iss >> conType >> conName)){
+      if (!IsBlank(readLine)){
         PrintfError(readLine);
-      else
+      }else{
         continue;
+      }
+    }
     if (conType == 'L')
       conIdx = modelConUtil->MakeCon(conName);
     else if (conType == 'E')
@@ -126,11 +128,13 @@ void ReaderMPS::Read(
     if (readLine[0] == 'R')
       break;
     IssSetup();
-    if (!(iss >> varName >> conName))
-      if (!IsBlank(readLine))
+    if (!(iss >> varName >> conName)){
+      if (!IsBlank(readLine)){
         PrintfError(readLine);
-      else
+      }else{
         continue;
+      }
+    }
     if (conName == "\'MARKER\'")
     {
       iss >> tempStr;
@@ -166,11 +170,13 @@ void ReaderMPS::Read(
         readLine[0] == 'S') // do not handle RANGS and SOS
       PrintfError(readLine);
     IssSetup();
-    if (!(iss >> tempStr >> conName >> rhs))
-      if (!IsBlank(readLine))
+    if (!(iss >> tempStr >> conName >> rhs)){
+      if (!IsBlank(readLine)){
         PrintfError(readLine);
-      else
+      }else{
         continue;
+      }
+    }
     if (conName.length() < 1)
       continue;
     conIdx = modelConUtil->GetConIdx(conName);
@@ -197,11 +203,13 @@ void ReaderMPS::Read(
     if (readLine[0] == 'I') // do not handle INDICATORS
       PrintfError(readLine);
     IssSetup();
-    if (!(iss >> varType >> tempStr >> varName))
-      if (!IsBlank(readLine))
+    if (!(iss >> varType >> tempStr >> varName)){
+      if (!IsBlank(readLine)){
         PrintfError(readLine);
-      else
+      }else{
         continue;
+      }
+    }
     iss >> inputBound;
     if (modelVarUtil->name2idx.find(varName) != modelVarUtil->name2idx.end())
     {

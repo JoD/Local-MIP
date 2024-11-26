@@ -62,15 +62,17 @@ long LocalMIP::TightScore(
           localCon.LHS + modelCon.coeffSet[posInCon] * _delta;
       isPreSat = localCon.SAT();
       isNowSat = newLHS < localCon.RHS + FeasibilityTol;
-      if (!isPreSat && isNowSat)
+      if (!isPreSat && isNowSat){
         score += localCon.weight;
-      else if (isPreSat && !isNowSat)
+      }else if (isPreSat && !isNowSat){
         score -= localCon.weight;
-      else if (!isPreSat && !isNowSat)
-        if (localCon.LHS > newLHS)
+      }else if (!isPreSat && !isNowSat){
+        if (localCon.LHS > newLHS){
           score += localCon.weight >> 1;
-        else
+        }else{
           score -= localCon.weight >> 1;
+        }
+      }
       isPreStable = localCon.LHS < localCon.RHS - FeasibilityTol;
       isNowStable = newLHS < localCon.RHS - FeasibilityTol;
       if (!isPreStable && isNowStable)
