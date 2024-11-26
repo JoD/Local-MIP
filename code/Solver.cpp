@@ -26,6 +26,10 @@ Solver::Solver()
 
 Solver::~Solver()
 {
+  delete modelConUtil;
+  delete modelVarUtil;
+  delete readerMPS;
+  delete localMIP;
 }
 
 void Solver::Run()
