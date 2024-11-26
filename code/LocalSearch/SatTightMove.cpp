@@ -62,8 +62,8 @@ bool LocalMIP::SatTightMove(
           delta = modelVar.lowerBound - localVar.nowValue;
         }
       }
-      if (delta < 0 && curStep < localVar.allowDecStep ||
-          delta > 0 && curStep < localVar.allowIncStep)
+      if ((delta < 0 && curStep < localVar.allowDecStep) ||
+          (delta > 0 && curStep < localVar.allowIncStep))
         continue;
       if (fabs(delta) < FeasibilityTol)
         continue;
@@ -90,7 +90,7 @@ bool LocalMIP::SatTightMove(
   {
     size_t varIdx = neighborVarIdxs[idx];
     Value delta = neighborDeltas[idx];
-    auto &localVar = localVarUtil.GetVar(varIdx);
+    // auto &localVar = localVarUtil.GetVar(varIdx); // unused?
     auto &modelVar = modelVarUtil->GetVar(varIdx);
     if (modelVar.type == VarType::Binary)
     {
@@ -104,7 +104,7 @@ bool LocalMIP::SatTightMove(
     }
     long score = TightScore(modelVar, delta);
     if (bestScore < score ||
-        bestScore == score && bestSubscore < subscore)
+        (bestScore == score && bestSubscore < subscore))
     {
       bestScore = score;
       bestVarIdx = varIdx;

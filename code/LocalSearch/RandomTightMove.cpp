@@ -44,8 +44,8 @@ void LocalMIP::RandomTightMove()
         else
           delta = modelVar.upperBound - localVar.nowValue;
       }
-      if (delta < 0 && curStep == localVar.lastIncStep + 1 ||
-           delta > 0 && curStep == localVar.lastDecStep + 1)
+      if ((delta < 0 && curStep == localVar.lastIncStep + 1) ||
+           (delta > 0 && curStep == localVar.lastDecStep + 1))
         continue;
       if (fabs(delta) < FeasibilityTol)
         continue;
@@ -69,8 +69,8 @@ void LocalMIP::RandomTightMove()
           delta = modelVar.upperBound - localVar.nowValue;
         }
       }
-      if (delta < 0 && curStep < localVar.allowDecStep ||
-          delta > 0 && curStep < localVar.allowIncStep)
+      if ((delta < 0 && curStep < localVar.allowDecStep) ||
+          (delta > 0 && curStep < localVar.allowIncStep))
         continue;
       if (fabs(delta) < FeasibilityTol)
         continue;
@@ -97,11 +97,11 @@ void LocalMIP::RandomTightMove()
   {
     size_t varIdx = neighborVarIdxs[idx];
     Value delta = neighborDeltas[idx];
-    auto &localVar = localVarUtil.GetVar(varIdx);
+    // auto &localVar = localVarUtil.GetVar(varIdx); // unused?
     auto &modelVar = modelVarUtil->GetVar(varIdx);
     long score = TightScore(modelVar, delta);
     if (bestScore < score ||
-        bestScore == score && bestSubscore < subscore)
+        (bestScore == score && bestSubscore < subscore))
     {
       bestScore = score;
       bestVarIdx = varIdx;
@@ -109,7 +109,7 @@ void LocalMIP::RandomTightMove()
       bestSubscore = subscore;
     }
   }
-  if (bestVarIdx != -1 && bestDelta != 0)
+  if (bestVarIdx != static_cast<size_t>(-1) && bestDelta != 0)
   {
     if (DEBUG)
       printf("Radom: %-10ld; ", bestScore);

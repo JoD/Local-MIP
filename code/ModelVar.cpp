@@ -80,18 +80,18 @@ bool ModelVar::IsFixed()
 bool ModelVar::IsBinary()
 {
   return type == VarType::Binary ||
-         type == VarType::Integer &&
+         (type == VarType::Integer &&
              fabs(lowerBound - 0.0) < FeasibilityTol &&
-             fabs(upperBound - 1.0) < FeasibilityTol;
+             fabs(upperBound - 1.0) < FeasibilityTol);
 }
 
 ModelVarUtil::ModelVarUtil()
-    : integerNum(0),
+    : isBin(true),
+      varNum(-1),
+      integerNum(0),
       binaryNum(0),
       fixedNum(0),
       realNum(0),
-      isBin(true),
-      varNum(-1),
       objBias(0)
 {
 }

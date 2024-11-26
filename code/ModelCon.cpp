@@ -20,9 +20,9 @@ ModelCon::ModelCon(
     const string &_name,
     const size_t _idx)
     : name(_name),
+      idx(_idx),
       isEqual(false),
       isLarge(false),
-      idx(_idx),
       RHS(0),
       inferSAT(false),
       termNum(-1)

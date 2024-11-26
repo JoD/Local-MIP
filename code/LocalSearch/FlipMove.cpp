@@ -44,12 +44,12 @@ bool LocalMIP::FlipMove(
       delta = -1;
     else
       delta = 1;
-    if (delta < 0 && curStep < localVar.allowDecStep ||
-        delta > 0 && curStep < localVar.allowIncStep)
+    if ((delta < 0 && curStep < localVar.allowDecStep) ||
+        (delta > 0 && curStep < localVar.allowIncStep))
       continue;
     long score = TightScore(modelVar, delta);
     if (bestScore < score ||
-        bestScore == score && bestSubscore < subscore)
+        (bestScore == score && bestSubscore < subscore))
     {
       bestScore = score;
       bestVarIdx = varIdx;

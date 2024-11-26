@@ -143,7 +143,7 @@ void LocalMIP::UpdateBestSolution()
   for (auto &localVar : localVarUtil.varSet)
     localVar.bestValue = localVar.nowValue;
   auto &localObj = localConUtil.conSet[0];
-  auto &modelObj = modelConUtil->conSet[0];
+  // auto &modelObj = modelConUtil->conSet[0]; // unused?
   bestOBJ = localObj.LHS;
   localObj.RHS = bestOBJ - OptimalTol;
 }
@@ -161,7 +161,7 @@ void LocalMIP::ApplyMove(
   for (size_t termIdx = 0; termIdx < modelVar.termNum; ++termIdx)
   {
     size_t conIdx = modelVar.conIdxSet[termIdx];
-    size_t posInCon = modelVar.posInCon[termIdx];
+    // size_t posInCon = modelVar.posInCon[termIdx]; // unused?
     auto &localCon = localConUtil.conSet[conIdx];
     auto &modelCon = modelConUtil->conSet[conIdx];
     Value newLHS = 0;
@@ -270,7 +270,7 @@ bool LocalMIP::VerifySolution()
 
   for (size_t conIdx = 1; conIdx < modelConUtil->conNum; ++conIdx)
   {
-    auto &con = localConUtil.conSet[conIdx];
+    // auto &con = localConUtil.conSet[conIdx]; // unused?
     auto &modelCon = modelConUtil->conSet[conIdx];
     Value lhs = 0;
     for (size_t termIdx = 0; termIdx < modelCon.termNum; ++termIdx)
@@ -284,7 +284,7 @@ bool LocalMIP::VerifySolution()
     }
   }
   // Obj
-  auto &localObj = localConUtil.conSet[0];
+  // auto &localObj = localConUtil.conSet[0]; // unused?
   auto &modelObj = modelConUtil->conSet[0];
   Value objValue = 0;
   for (size_t termIdx = 0; termIdx < modelObj.termNum; ++termIdx)

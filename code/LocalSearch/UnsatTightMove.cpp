@@ -64,8 +64,8 @@ bool LocalMIP::UnsatTightMove()
             delta = modelVar.upperBound - localVar.nowValue;
           }
         }
-        if (delta < 0 && curStep < localVar.allowDecStep ||
-            delta > 0 && curStep < localVar.allowIncStep)
+        if ((delta < 0 && curStep < localVar.allowDecStep) ||
+            (delta > 0 && curStep < localVar.allowIncStep))
           continue;
         if (fabs(delta) < FeasibilityTol)
           continue;
@@ -89,8 +89,8 @@ bool LocalMIP::UnsatTightMove()
           delta = modelVar.upperBound - localVar.nowValue;
         }
       }
-      if (delta < 0 && curStep < localVar.allowDecStep ||
-          delta > 0 && curStep < localVar.allowIncStep)
+      if ((delta < 0 && curStep < localVar.allowDecStep) ||
+          (delta > 0 && curStep < localVar.allowIncStep))
         continue;
       if (fabs(delta) < FeasibilityTol)
         continue;
@@ -99,8 +99,8 @@ bool LocalMIP::UnsatTightMove()
     }
   }
   size_t scoreSize = neighborVarIdxs.size();
-  if (!isFoundFeasible && scoreSize > bmsUnsatInfeas ||
-      isFoundFeasible && scoreSize > bmsUnsatFeas)
+  if ((!isFoundFeasible && scoreSize > bmsUnsatInfeas) ||
+      (isFoundFeasible && scoreSize > bmsUnsatFeas))
   {
     if (!isFoundFeasible)
       scoreSize = bmsUnsatInfeas;
@@ -121,7 +121,7 @@ bool LocalMIP::UnsatTightMove()
   {
     size_t varIdx = neighborVarIdxs[idx];
     Value delta = neighborDeltas[idx];
-    auto &localVar = localVarUtil.GetVar(varIdx);
+    // auto &localVar = localVarUtil.GetVar(varIdx); // unused?
     auto &modelVar = modelVarUtil->GetVar(varIdx);
     if (modelVar.type == VarType::Binary)
     {
@@ -135,7 +135,7 @@ bool LocalMIP::UnsatTightMove()
     }
     long score = TightScore(modelVar, delta);
     if (bestScore < score ||
-        bestScore == score && bestSubscore < subscore)
+        (bestScore == score && bestSubscore < subscore))
     {
       bestScore = score;
       bestVarIdx = varIdx;

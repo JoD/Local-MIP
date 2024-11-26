@@ -18,7 +18,7 @@
 
 bool LocalMIP::LiftMoveWithoutBreak()
 {
-  auto &localObj = localConUtil.conSet[0];
+  // auto &localObj = localConUtil.conSet[0]; // unused?
   auto &modelObj = modelConUtil->conSet[0];
   vector<Value> &lowerDelta = localVarUtil.lowerDeltaInLiftMove;
   vector<Value> &upperDelta = localVarUtil.upperDeltaInLifiMove;
@@ -74,8 +74,8 @@ bool LocalMIP::LiftMoveWithoutBreak()
   Value bestVarDelta = 0;
   Value varDelta;
   Value objDelta;
-  Value objDelta_l;
-  Value objDelta_u;
+  // Value objDelta_l; // unused?
+  // Value objDelta_u; // unused?
   vector<size_t> betterIdx;
   vector<Value> betterDelta;
   size_t bestLastMoveStep = std::numeric_limits<size_t>::max();
@@ -108,7 +108,7 @@ bool LocalMIP::LiftMoveWithoutBreak()
     size_t lastMoveStep =
         varDelta < 0 ? localVar.lastDecStep : localVar.lastIncStep;
     if (objDelta < bestObjDelta ||
-        objDelta < bestObjDelta + OptimalTol && lastMoveStep < bestLastMoveStep)
+        (objDelta < bestObjDelta + OptimalTol && lastMoveStep < bestLastMoveStep))
     {
       bestObjDelta = objDelta;
       bestVarIdx = varIdx;
@@ -122,20 +122,20 @@ bool LocalMIP::LiftMoveWithoutBreak()
     // }
   }
 
-  if (bestVarIdx != -1 && bestVarDelta != 0)
+  if (bestVarIdx != static_cast<size_t>(-1) && bestVarDelta != 0)
   {
     ++liftStep;
     ApplyMove(bestVarIdx, bestVarDelta);
     isKeepFeas = true;
     unordered_set<size_t> &affectedVar = localVarUtil.affectedVar;
     affectedVar.clear();
-    auto &bestLocalVar = localVarUtil.GetVar(bestVarIdx);
+    // auto &bestLocalVar = localVarUtil.GetVar(bestVarIdx); // unused?
     auto &bestModelVar = modelVarUtil->GetVar(bestVarIdx);
     for (auto conIdx : bestModelVar.conIdxSet)
     {
       if (conIdx == 0)
         continue;
-      auto &localCon = localConUtil.GetCon(conIdx);
+      // auto &localCon = localConUtil.GetCon(conIdx); // unused?
       auto &modelCon = modelConUtil->GetCon(conIdx);
       for (auto varIdx : modelCon.varIdxSet)
         affectedVar.insert(varIdx);
@@ -143,7 +143,7 @@ bool LocalMIP::LiftMoveWithoutBreak()
     for (auto varIdx : affectedVar)
     {
       size_t idxInObj = modelVarUtil->varIdx2ObjIdx[varIdx];
-      if (idxInObj == -1)
+      if (idxInObj == static_cast<size_t>(-1))
         continue;
       auto &localVar = localVarUtil.GetVar(varIdx);
       auto &modelVar = modelVarUtil->GetVar(varIdx);

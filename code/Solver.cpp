@@ -36,7 +36,7 @@ void Solver::Run()
 {
   ParseObj();
   readerMPS->Read(fileName);
-  int Result = localMIP->LocalSearch(optimalObj, clkStart);
+  [[maybe_unused]] int Result = localMIP->LocalSearch(optimalObj, clkStart); // unused?
   localMIP->PrintResult();
 }
 
