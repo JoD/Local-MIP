@@ -15,38 +15,42 @@
 =====================================================================================*/
 
 #pragma once
-#include "utils/paras.h"
 #include "ModelCon.h"
 #include "ModelVar.h"
+#include "utils/paras.h"
 
-class ReaderMPS
-{
+class ReaderMPS {
 private:
   ModelConUtil *modelConUtil;
   ModelVarUtil *modelVarUtil;
   istringstream iss;
   string readLine;
   bool integralityMarker;
+
   bool TightenBound();
+
   void TightenBoundVar(ModelCon &_modelCon);
+
   bool TightBoundGlobally();
+
   bool SetVarType();
+
   void SetVarIdx2ObjIdx();
+
   vector<size_t> fixedIdxs;
   size_t deleteConNum;
   size_t deleteVarNum;
   size_t inferVarNum;
+
   inline void IssSetup();
-  void PushCoeffVarIdx(
-      const size_t _conIdx,
-      Value _coeff,
-      const string &_varName);
+
+  void PushCoeffVarIdx(const size_t _conIdx, Value _coeff,
+                       const string &_varName);
 
 public:
-  ReaderMPS(
-      ModelConUtil *_modelConUtil,
-      ModelVarUtil *_modelVarUtil);
+  ReaderMPS(ModelConUtil *_modelConUtil, ModelVarUtil *_modelVarUtil);
+
   ~ReaderMPS();
-  void Read(
-      const char *_fileName);
+
+  void Read(const char *_fileName);
 };

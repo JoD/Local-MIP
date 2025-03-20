@@ -17,8 +17,7 @@
 #pragma once
 #include "utils/paras.h"
 
-class ModelCon
-{
+class ModelCon {
 public:
   string name;
   size_t idx;
@@ -31,14 +30,12 @@ public:
   bool inferSAT;
   size_t termNum;
 
-  ModelCon(
-      const string &_name,
-      const size_t _idx);
+  ModelCon(const string &_name, const size_t _idx);
+
   ~ModelCon();
 };
 
-class ModelConUtil
-{
+class ModelConUtil {
 public:
   unordered_map<string, size_t> name2idx;
   vector<ModelCon> conSet;
@@ -47,15 +44,16 @@ public:
   int MIN = 1;
 
   ModelConUtil();
+
   ~ModelConUtil();
-  size_t MakeCon(
-      const string &_name);
-  size_t GetConIdx(
-      const string &_name);
-  const ModelCon &GetCon(
-      const size_t _idx) const;
-  ModelCon &GetCon(
-      const size_t _idx);
-  ModelCon &GetCon(
-      const string &_name);
+
+  size_t MakeCon(const string &_name);
+
+  size_t GetConIdx(const string &_name);
+
+  const ModelCon &GetCon(const size_t _idx) const;
+
+  ModelCon &GetCon(const size_t _idx);
+
+  ModelCon &GetCon(const string &_name);
 };
