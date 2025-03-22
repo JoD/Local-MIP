@@ -20,7 +20,7 @@
 
 class ReaderMPS
 {
-private:
+public:
   ModelConUtil *modelConUtil;
   ModelVarUtil *modelVarUtil;
   std::istringstream iss;
