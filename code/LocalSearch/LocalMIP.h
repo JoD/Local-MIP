@@ -64,14 +64,14 @@ private:
   void Restart();
   bool UnsatTightMove();
   bool FlipMove(
-      vector<bool> &_scoreTable,
-      vector<size_t> &_scoreIdx);
+      std::vector<bool> &_scoreTable,
+      std::vector<size_t> &_scoreIdx);
   void RandomTightMove();
   void LiftMove();
   bool LiftMoveWithoutBreak();
   bool SatTightMove(
-      vector<bool> &_scoreTable,
-      vector<size_t> &_scoreIdx);
+      std::vector<bool> &_scoreTable,
+      std::vector<size_t> &_scoreIdx);
   void UpdateWeight();
   void SmoothWeight();
   void ApplyMove(
@@ -87,9 +87,9 @@ private:
       Value &_res);
   void InitSolution();
   bool Timeout(
-      chrono::_V2::system_clock::time_point &_clkStart);
+      std::chrono::_V2::system_clock::time_point &_clkStart);
   void LogObj(
-      chrono::_V2::system_clock::time_point &_clkStart);
+      std::chrono::_V2::system_clock::time_point &_clkStart);
 
 public:
   LocalMIP(
@@ -98,7 +98,7 @@ public:
   ~LocalMIP();
   int LocalSearch(
       Value _optimalObj,
-      chrono::_V2::system_clock::time_point _clkStart);
+      std::chrono::_V2::system_clock::time_point _clkStart);
   void PrintResult();
   void PrintSol();
   void Allocate();

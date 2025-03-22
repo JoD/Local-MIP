@@ -34,14 +34,14 @@ public:
 class LocalVarUtil
 {
 public:
-  vector<LocalVar> varSet;
-  vector<Value> lowerDeltaInLiftMove;
-  vector<Value> upperDeltaInLifiMove;
-  vector<Value> tempDeltas;
-  vector<size_t> tempVarIdxs;
-  vector<bool> scoreTable;
-  vector<size_t> binaryIdx;
-  unordered_set<size_t> affectedVar;
+  std::vector<LocalVar> varSet;
+  std::vector<Value> lowerDeltaInLiftMove;
+  std::vector<Value> upperDeltaInLifiMove;
+  std::vector<Value> tempDeltas;
+  std::vector<size_t> tempVarIdxs;
+  std::vector<bool> scoreTable;
+  std::vector<size_t> binaryIdx;
+  std::unordered_set<size_t> affectedVar;
 
   LocalVarUtil();
   ~LocalVarUtil();

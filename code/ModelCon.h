@@ -20,19 +20,19 @@
 class ModelCon
 {
 public:
-  string name;
+  std::string name;
   size_t idx;
   bool isEqual;
   bool isLarge;
-  vector<Value> coeffSet;
-  vector<size_t> varIdxSet;
-  vector<size_t> posInVar;
+  std::vector<Value> coeffSet;
+  std::vector<size_t> varIdxSet;
+  std::vector<size_t> posInVar;
   Value RHS;
   bool inferSAT;
   size_t termNum;
 
   ModelCon(
-      const string &_name,
+      const std::string &_name,
       const size_t _idx);
   ~ModelCon();
 };
@@ -40,22 +40,22 @@ public:
 class ModelConUtil
 {
 public:
-  unordered_map<string, size_t> name2idx;
-  vector<ModelCon> conSet;
-  string objName;
+  std::unordered_map<std::string, size_t> name2idx;
+  std::vector<ModelCon> conSet;
+  std::string objName;
   size_t conNum;
   int MIN = 1;
 
   ModelConUtil();
   ~ModelConUtil();
   size_t MakeCon(
-      const string &_name);
+      const std::string &_name);
   size_t GetConIdx(
-      const string &_name);
+      const std::string &_name);
   const ModelCon &GetCon(
       const size_t _idx) const;
   ModelCon &GetCon(
       const size_t _idx);
   ModelCon &GetCon(
-      const string &_name);
+      const std::string &_name);
 };

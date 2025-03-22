@@ -31,7 +31,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <chrono>
-using namespace std;
+// using namespace std;
 using Value = double;
 const Value Infinity = 1e20;
 const Value NegativeInfinity = -Infinity;
@@ -54,6 +54,6 @@ double ElapsedTime(
     const std::chrono::_V2::system_clock::time_point &a,
     const std::chrono::_V2::system_clock::time_point &b);
 bool IsBlank(
-    const string &a);
+    const std::string &a);
 void PrintfError(
-    const string &a);
+    const std::string &a);

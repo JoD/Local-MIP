@@ -18,20 +18,20 @@
 
 bool LocalMIP::UnsatTightMove()
 {
-  vector<bool> &scoreTable = localVarUtil.scoreTable;
-  vector<size_t> scoreIdxs;
+  std::vector<bool> &scoreTable = localVarUtil.scoreTable;
+  std::vector<size_t> scoreIdxs;
   long bestScore = 0;
   long bestSubscore = -std::numeric_limits<long>::max();
   size_t bestVarIdx = -1;
   Value bestDelta = 0;
-  vector<size_t> &neighborVarIdxs = localVarUtil.tempVarIdxs;
-  vector<Value> &neighborDeltas = localVarUtil.tempDeltas;
+  std::vector<size_t> &neighborVarIdxs = localVarUtil.tempVarIdxs;
+  std::vector<Value> &neighborDeltas = localVarUtil.tempDeltas;
   neighborVarIdxs.clear();
   neighborDeltas.clear();
   if (localConUtil.unsatConIdxs.size() > 0)
   {
     size_t neighborSize = localConUtil.unsatConIdxs.size();
-    vector<size_t> *neighborConIdxs = &localConUtil.unsatConIdxs;
+    std::vector<size_t> *neighborConIdxs = &localConUtil.unsatConIdxs;
     if (sampleUnsat < neighborSize)
     {
       neighborSize = sampleUnsat;

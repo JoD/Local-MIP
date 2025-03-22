@@ -17,8 +17,8 @@
 #include "LocalMIP.h"
 
 bool LocalMIP::FlipMove(
-    vector<bool> &_scoreTable,
-    vector<size_t> &_scoreIdx)
+    std::vector<bool> &_scoreTable,
+    std::vector<size_t> &_scoreIdx)
 {
   if (localVarUtil.binaryIdx.size() == 0)
     return false;

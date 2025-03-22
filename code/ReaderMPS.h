@@ -24,15 +24,15 @@ class ReaderMPS
 private:
   ModelConUtil *modelConUtil;
   ModelVarUtil *modelVarUtil;
-  istringstream iss;
-  string readLine;
+  std::istringstream iss;
+  std::string readLine;
   bool integralityMarker;
   bool TightenBound();
   void TightenBoundVar(ModelCon &_modelCon);
   bool TightBoundGlobally();
   bool SetVarType();
   void SetVarIdx2ObjIdx();
-  vector<size_t> fixedIdxs;
+  std::vector<size_t> fixedIdxs;
   size_t deleteConNum;
   size_t deleteVarNum;
   size_t inferVarNum;
@@ -40,7 +40,7 @@ private:
   void PushCoeffVarIdx(
       const size_t _conIdx,
       Value _coeff,
-      const string &_varName);
+      const std::string &_varName);
 
 public:
   ReaderMPS(

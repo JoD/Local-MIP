@@ -17,7 +17,7 @@
 #include "ModelCon.h"
 
 ModelCon::ModelCon(
-    const string &_name,
+    const std::string &_name,
     const size_t _idx)
     : name(_name),
       idx(_idx),
@@ -48,7 +48,7 @@ ModelConUtil::~ModelConUtil()
 }
 
 size_t ModelConUtil::MakeCon(
-    const string &_name)
+    const std::string &_name)
 {
   auto iter = name2idx.find(_name);
   if (iter != name2idx.end())
@@ -60,7 +60,7 @@ size_t ModelConUtil::MakeCon(
 }
 
 size_t ModelConUtil::GetConIdx(
-    const string &_name)
+    const std::string &_name)
 {
   if (_name == objName)
     return 0;
@@ -81,7 +81,7 @@ ModelCon &ModelConUtil::GetCon(
 }
 
 ModelCon &ModelConUtil::GetCon(
-    const string &_name)
+    const std::string &_name)
 {
   if (_name == objName)
     return conSet[0];

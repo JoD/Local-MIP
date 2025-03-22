@@ -34,11 +34,11 @@ public:
 class LocalConUtil
 {
 public:
-  vector<LocalCon> conSet;
-  vector<size_t> unsatConIdxs;
-  vector<size_t> tempUnsatConIdxs;
-  vector<size_t> tempSatConIdxs;
-  unordered_set<size_t> sampleSet;
+  std::vector<LocalCon> conSet;
+  std::vector<size_t> unsatConIdxs;
+  std::vector<size_t> tempUnsatConIdxs;
+  std::vector<size_t> tempSatConIdxs;
+  std::unordered_set<size_t> sampleSet;
 
   LocalConUtil();
   ~LocalConUtil();

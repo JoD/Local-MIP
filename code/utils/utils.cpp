@@ -18,18 +18,18 @@
 
 std::chrono::_V2::system_clock::time_point TimeNow()
 {
-  return chrono::high_resolution_clock::now();
+  return std::chrono::high_resolution_clock::now();
 }
 
 double ElapsedTime(
     const std::chrono::_V2::system_clock::time_point &a,
     const std::chrono::_V2::system_clock::time_point &b)
 {
-  return chrono::duration_cast<chrono::milliseconds>(a - b).count() / 1000.0;
+  return std::chrono::duration_cast<std::chrono::milliseconds>(a - b).count() / 1000.0;
 }
 
 bool IsBlank(
-    const string &a)
+    const std::string &a)
 {
   for (auto x : a)
     if (x != ' ' && x != '\n' && x != '\r')
@@ -38,7 +38,7 @@ bool IsBlank(
 }
 
 void PrintfError(
-    const string &a)
+    const std::string &a)
 {
   printf("c error line: %s\n", a.c_str());
   exit(-1);

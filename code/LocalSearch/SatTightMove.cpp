@@ -17,8 +17,8 @@
 #include "LocalMIP.h"
 
 bool LocalMIP::SatTightMove(
-    vector<bool> &score_table,
-    vector<size_t> &score_idx)
+    std::vector<bool> &score_table,
+    std::vector<size_t> &score_idx)
 {
   if (modelConUtil->conNum <= 1)
     return false;
@@ -26,8 +26,8 @@ bool LocalMIP::SatTightMove(
   long bestSubscore = -std::numeric_limits<long>::max();
   size_t bestVarIdx = -1;
   Value bestDelta = 0;
-  vector<size_t> &neighborVarIdxs = localVarUtil.tempVarIdxs;
-  vector<Value> &neighborDeltas = localVarUtil.tempDeltas;
+  std::vector<size_t> &neighborVarIdxs = localVarUtil.tempVarIdxs;
+  std::vector<Value> &neighborDeltas = localVarUtil.tempDeltas;
   neighborVarIdxs.clear();
   neighborDeltas.clear();
   auto &neighborConIdxs = localConUtil.tempSatConIdxs;

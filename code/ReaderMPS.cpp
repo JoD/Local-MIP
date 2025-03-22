@@ -32,18 +32,18 @@ ReaderMPS::~ReaderMPS()
 void ReaderMPS::Read(
     const char *_filename)
 {
-  ifstream infile(_filename);
-  string modelName;
-  string tempStr;
+  std::ifstream infile(_filename);
+  std::string modelName;
+  std::string tempStr;
   char conType;
-  string conName;
-  string inverseConName;
+  std::string conName;
+  std::string inverseConName;
   size_t inverseConIdx;
   size_t conIdx;
-  string varName;
+  std::string varName;
   Value coefficient;
   Value rhs;
-  string varType;
+  std::string varType;
   Value inputBound;
   if (!infile)
   {
@@ -66,7 +66,7 @@ void ReaderMPS::Read(
   }
   if (readLine[0] == 'O')
   {
-    if (readLine.find("MAX") != string::npos)
+    if (readLine.find("MAX") != std::string::npos)
       modelConUtil->MIN = -1;
     while (getline(infile, readLine))
     {
@@ -76,7 +76,7 @@ void ReaderMPS::Read(
         break;
       IssSetup();
       iss >> tempStr;
-      cout << tempStr << endl;
+      std::cout << tempStr << std::endl;
       if (tempStr == "MAX")
         modelConUtil->MIN = -1;
     }
@@ -281,13 +281,13 @@ inline void ReaderMPS::IssSetup()
 {
   iss.clear();
   iss.str(readLine);
-  iss.seekg(0, ios::beg);
+  iss.seekg(0, std::ios::beg);
 }
 
 void ReaderMPS::PushCoeffVarIdx(
     const size_t _conIdx,
     Value _coeff,
-    const string &_varName)
+    const std::string &_varName)
 {
   auto &con = modelConUtil->conSet[_conIdx];
   size_t _varIdx = modelVarUtil->MakeVar(

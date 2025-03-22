@@ -22,8 +22,8 @@ void LocalMIP::RandomTightMove()
   long bestSubscore = -std::numeric_limits<long>::max();
   size_t bestVarIdx = -1;
   Value bestDelta = 0;
-  vector<size_t> &neighborVarIdxs = localVarUtil.tempVarIdxs;
-  vector<Value> &neighborDeltas = localVarUtil.tempDeltas;
+  std::vector<size_t> &neighborVarIdxs = localVarUtil.tempVarIdxs;
+  std::vector<Value> &neighborDeltas = localVarUtil.tempDeltas;
   neighborVarIdxs.clear();
   neighborDeltas.clear();
   if (localConUtil.unsatConIdxs.size() > 0)

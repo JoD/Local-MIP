@@ -20,17 +20,17 @@
 class ModelVar
 {
 public:
-	string name;
+	std::string name;
 	size_t idx;
 	Value upperBound;
 	Value lowerBound;
-	vector<size_t> conIdxSet;
-	vector<size_t> posInCon;
+	std::vector<size_t> conIdxSet;
+	std::vector<size_t> posInCon;
 	size_t termNum;
 	VarType type;
 
 	ModelVar(
-			const string &_name,
+			const std::string &_name,
 			size_t _idx,
 			bool _integrality);
 	~ModelVar();
@@ -49,9 +49,9 @@ public:
 class ModelVarUtil
 {
 public:
-	unordered_map<string, size_t> name2idx;
-	vector<ModelVar> varSet;
-	vector<size_t> varIdx2ObjIdx;
+	std::unordered_map<std::string, size_t> name2idx;
+	std::vector<ModelVar> varSet;
+	std::vector<size_t> varIdx2ObjIdx;
 	bool isBin;
 	size_t varNum;
 	size_t integerNum;
@@ -63,12 +63,12 @@ public:
 	ModelVarUtil();
 	~ModelVarUtil();
 	size_t MakeVar(
-			const string &_name,
+			const std::string &_name,
 			const bool _integrality);
 	const ModelVar &GetVar(
 			const size_t _idx) const;
 	ModelVar &GetVar(
 			const size_t _idx);
 	ModelVar &GetVar(
-			const string &_name);
+			const std::string &_name);
 };

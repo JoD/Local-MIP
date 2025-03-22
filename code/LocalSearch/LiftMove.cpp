@@ -20,8 +20,8 @@ bool LocalMIP::LiftMoveWithoutBreak()
 {
   // auto &localObj = localConUtil.conSet[0]; // unused?
   auto &modelObj = modelConUtil->conSet[0];
-  vector<Value> &lowerDelta = localVarUtil.lowerDeltaInLiftMove;
-  vector<Value> &upperDelta = localVarUtil.upperDeltaInLifiMove;
+  std::vector<Value> &lowerDelta = localVarUtil.lowerDeltaInLiftMove;
+  std::vector<Value> &upperDelta = localVarUtil.upperDeltaInLifiMove;
   if (!isKeepFeas)
   {
     for (size_t termIdx = 0; termIdx < modelObj.termNum; ++termIdx)
@@ -76,8 +76,8 @@ bool LocalMIP::LiftMoveWithoutBreak()
   Value objDelta;
   // Value objDelta_l; // unused?
   // Value objDelta_u; // unused?
-  vector<size_t> betterIdx;
-  vector<Value> betterDelta;
+  std::vector<size_t> betterIdx;
+  std::vector<Value> betterDelta;
   size_t bestLastMoveStep = std::numeric_limits<size_t>::max();
   for (size_t termIdx = 0; termIdx < modelObj.termNum; ++termIdx)
   {
@@ -127,7 +127,7 @@ bool LocalMIP::LiftMoveWithoutBreak()
     ++liftStep;
     ApplyMove(bestVarIdx, bestVarDelta);
     isKeepFeas = true;
-    unordered_set<size_t> &affectedVar = localVarUtil.affectedVar;
+    std::unordered_set<size_t> &affectedVar = localVarUtil.affectedVar;
     affectedVar.clear();
     // auto &bestLocalVar = localVarUtil.GetVar(bestVarIdx); // unused?
     auto &bestModelVar = modelVarUtil->GetVar(bestVarIdx);

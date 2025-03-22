@@ -17,7 +17,7 @@
 #include "ModelVar.h"
 
 ModelVar::ModelVar(
-    const string &_name,
+    const std::string &_name,
     size_t _idx,
     bool _integrality)
     : name(_name),
@@ -103,7 +103,7 @@ ModelVarUtil::~ModelVarUtil()
 }
 
 size_t ModelVarUtil::MakeVar(
-    const string &_name,
+    const std::string &_name,
     const bool _integrality)
 {
   auto iter = name2idx.find(_name);
@@ -130,7 +130,7 @@ ModelVar &ModelVarUtil::GetVar(
 }
 
 ModelVar &ModelVarUtil::GetVar(
-    const string &_name)
+    const std::string &_name)
 {
   return varSet[name2idx[_name]];
 }
