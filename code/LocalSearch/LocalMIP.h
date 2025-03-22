@@ -15,7 +15,6 @@
 =====================================================================================*/
 
 #pragma once
-#include "utils/paras.h"
 #include "ModelCon.h"
 #include "ModelVar.h"
 #include "LocalCon.h"
@@ -55,7 +54,9 @@ private:
   size_t bmsRandom;
   size_t restartStep;
   Value bestOBJ;
-  bool DEBUG;
+  const bool DEBUG;
+  const bool PRINTSOL;
+  const Value CUTOFF;
   long subscore;
 
   bool VerifySolution();
@@ -94,7 +95,8 @@ private:
 public:
   LocalMIP(
       const ModelConUtil *_modelConUtil,
-      const ModelVarUtil *_modelVarUtil);
+      const ModelVarUtil *_modelVarUtil,
+      bool DEBUG=false, bool PRINTSOL=false, double CUTOFF=1e300);
   ~LocalMIP();
   int LocalSearch(
       Value _optimalObj,

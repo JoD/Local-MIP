@@ -67,7 +67,7 @@ bool LocalMIP::Timeout(
   auto clk_now = std::chrono::high_resolution_clock::now();
   auto solve_time =
       std::chrono::duration_cast<std::chrono::seconds>(clk_now - _clkStart).count();
-  if (solve_time >= OPT(cutoff))
+  if (solve_time >= CUTOFF)
     return true;
   return false;
 }
@@ -106,7 +106,7 @@ void LocalMIP::PrintResult()
   {
     printf("o Best objective: %lf\n", GetObjValue());
     // printf("B 1 %lf\n", GetObjValue());
-    if (OPT(PrintSol))
+    if (PRINTSOL)
       PrintSol();
   }
   else
@@ -356,12 +356,14 @@ Value LocalMIP::GetObjValue()
 
 LocalMIP::LocalMIP(
     const ModelConUtil *_modelConUtil,
-    const ModelVarUtil *_modelVarUtil)
+    const ModelVarUtil *_modelVarUtil,
+    bool debug, bool printsol, double cutoff)
     : modelConUtil(_modelConUtil),
-      modelVarUtil(_modelVarUtil)
+      modelVarUtil(_modelVarUtil),
+      DEBUG(debug),
+      PRINTSOL(printsol),
+      CUTOFF(cutoff)
 {
-  // set running parameter
-  DEBUG = OPT(DEBUG);
 }
 
 LocalMIP::~LocalMIP()
