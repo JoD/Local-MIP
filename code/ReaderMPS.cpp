@@ -25,6 +25,61 @@ ReaderMPS::~ReaderMPS() {
 
 void ReaderMPS::Read(
     const char *_filename) {
+  integralityMarker = true;
+  modelConUtil->MIN=1; // minimize function
+  modelConUtil->conSet.emplace_back("", 0); // obj line
+  modelConUtil->objName = "OBJ";
+  size_t obj_idx = 0;
+  size_t conIdx = modelConUtil->MakeCon("knap");
+  modelConUtil->conSet[conIdx].RHS = 9;
+  modelConUtil->conSet[conIdx].isLarge = true;
+
+  for (int i=1; i<=5; ++i) {
+    const std::string x = std::format("x{}", i);
+    PushCoeffVarIdx(obj_idx, 6-i, x);
+    PushCoeffVarIdx(conIdx, i, x);
+    auto &var = modelVarUtil->GetVar(x);
+    var.SetType(VarType::Binary);
+    var.SetUpperBound(1.0);
+    var.SetLowerBound(0.0);
+  }
+
+  for (conIdx = 1; conIdx < modelConUtil->conSet.size(); ++conIdx) {
+    auto &con = modelConUtil->conSet[conIdx];
+    if (con.isLarge) {
+      for (Value &inverseCoefficient : con.coeffSet)
+        inverseCoefficient = -inverseCoefficient;
+      con.RHS = -con.RHS;
+    }
+  }
+  modelVarUtil->objBias = -modelConUtil->conSet[0].RHS;
+  modelConUtil->conNum = modelConUtil->conSet.size();
+  modelVarUtil->varNum = modelVarUtil->varSet.size();
+
+  if (!TightenBound() || !TightBoundGlobally()) {
+    printf("c model is infeasible.\n");
+    exit(-1);
+  }
+
+  SetVarType();
+  SetVarIdx2ObjIdx();
+
+
+
+  // by default LESS THAN OR EQUAL.
+  // GREATER THAN OR EQUAL:
+  // modelConUtil->conSet[conIdx].isLarge = true;
+  // EQUALS:
+  // modelConUtil->conSet[conIdx].isEqual = true;
+  // inverseConName = conName + "!";
+  // inverseConIdx = modelConUtil->MakeCon(inverseConName);
+  // modelConUtil->conSet[inverseConIdx].isEqual = true;
+  // conIdx = modelConUtil->GetConIdx("test");
+  // Value coefficient = 1.0;
+  // PushCoeffVarIdx(conIdx, coefficient, "x");
+  // if (modelConUtil->conSet[conIdx].isEqual)
+  //   PushCoeffVarIdx(conIdx + 1, -coefficient, varName);
+  return;
   ifstream infile(_filename);
   string modelName;
   string tempStr;
@@ -32,7 +87,7 @@ void ReaderMPS::Read(
   string conName;
   string inverseConName;
   size_t inverseConIdx;
-  size_t conIdx;
+  // size_t conIdx;
   string varName;
   Value coefficient;
   Value rhs;
