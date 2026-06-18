@@ -15,122 +15,56 @@
 =====================================================================================*/
 
 #include "ModelVar.h"
+#include "LocalVar.h"
 
-ModelVar::ModelVar(
-    const std::string &_name,
-    size_t _idx,
-    bool _integrality)
-    : name(_name),
+ModelVar::ModelVar(const xct::IntVar* _iv, size_t _idx)
+    : iv(_iv),
       idx(_idx),
-      upperBound(DefaultRealUpperBound),
-      lowerBound(DefaultLowerBound),
-      termNum(-1),
-      type(VarType::Real)
-{
-  if (_integrality)
-  {
-    type = VarType::Binary;
-    upperBound = DefaultIntegerUpperBound;
-    lowerBound = DefaultLowerBound;
-  }
+      upperBound(static_cast<double>(iv->upperBound)),
+      lowerBound(static_cast<double>(iv->lowerBound)),
+      termNum(0),
+      type(upperBound == 1 && lowerBound == 0 ? type = VarType::Binary : VarType::Integer) {
+  // TODO: what with unscaled (binary) variables, e.g., x in [3,4]
 }
 
-ModelVar::~ModelVar()
-{
-  conIdxSet.clear();
-  posInCon.clear();
+bool ModelVar::InBound(Value value) const {
+  return lowerBound - FeasibilityTol < value && value < upperBound + FeasibilityTol;
 }
 
-bool ModelVar::InBound(
-    Value value) const
-{
-  return lowerBound - FeasibilityTol < value &&
-         value < upperBound + FeasibilityTol;
+void ModelVar::SetType(VarType _varType) { type = _varType; }
+
+void ModelVar::SetLowerBound(Value _lowerBound) { lowerBound = ceil(_lowerBound); }
+
+void ModelVar::SetUpperBound(Value _upperBound) { upperBound = floor(_upperBound); }
+
+bool ModelVar::IsFixed() const { return fabs(lowerBound - upperBound) < FeasibilityTol; }
+
+bool ModelVar::IsBinary() const {
+  return type == VarType::Binary || (type == VarType::Integer && fabs(lowerBound - 0.0) < FeasibilityTol &&
+                                     fabs(upperBound - 1.0) < FeasibilityTol);
 }
 
-void ModelVar::SetType(
-    VarType _varType)
-{
-  type = _varType;
-}
-
-void ModelVar::SetLowerBound(
-    Value _lowerBound)
-{
-  if (type == VarType::Real)
-    lowerBound = _lowerBound;
-  else
-    lowerBound = ceil(_lowerBound);
-}
-
-void ModelVar::SetUpperBound(
-    Value _upperBound)
-{
-  if (type == VarType::Real)
-    upperBound = _upperBound;
-  else
-    upperBound = floor(_upperBound);
-}
-
-bool ModelVar::IsFixed()
-{
-  return fabs(lowerBound - upperBound) < FeasibilityTol;
-}
-
-bool ModelVar::IsBinary()
-{
-  return type == VarType::Binary ||
-         (type == VarType::Integer &&
-             fabs(lowerBound - 0.0) < FeasibilityTol &&
-             fabs(upperBound - 1.0) < FeasibilityTol);
-}
-
-ModelVarUtil::ModelVarUtil()
-    : isBin(true),
-      varNum(-1),
-      integerNum(0),
-      binaryNum(0),
-      fixedNum(0),
-      realNum(0),
-      objBias(0)
-{
-}
-ModelVarUtil::~ModelVarUtil()
-{
-  varIdx2ObjIdx.clear();
-  name2idx.clear();
-  varSet.clear();
-}
-
-size_t ModelVarUtil::MakeVar(
-    const std::string &_name,
-    const bool _integrality)
-{
-  auto iter = name2idx.find(_name);
-  if (iter != name2idx.end())
-    return iter->second;
+size_t ModelVarUtil::MakeVar(const xct::IntVar* _iv, LocalVarUtil& lvu) {
+  auto iter = iv2idx.find(_iv);
+  if (iter != iv2idx.end()) return iter->second;
   size_t varIdx = varSet.size();
-  varSet.emplace_back(
-      _name, varIdx, _integrality);
-  name2idx[_name] = varIdx;
+  varSet.emplace_back(_iv, varIdx);
+  iv2idx[_iv] = varIdx;
+  varNum = varSet.size();  // maintain on append for incremental use
+
+  lvu.varSet.emplace_back();
+  lvu.scoreTable.push_back(false);
+  lvu.binaryIdxPos.push_back(-1);  // not in binaryIdx until SetVarType / setVarBounds says so
+  // NOTE: binaryIdx is filled at the end of ReaderMPS::SetVarType, after type promotion to Fixed.
+
   return varIdx;
 }
 
-const ModelVar &ModelVarUtil::GetVar(
-    const size_t _idx) const
-{
+const ModelVar& ModelVarUtil::GetVar(size_t _idx) const {
   assert(_idx < varSet.size());
   return varSet[_idx];
 }
 
-ModelVar &ModelVarUtil::GetVar(
-    const size_t _idx)
-{
-  return varSet[_idx];
-}
+ModelVar& ModelVarUtil::GetVar(size_t _idx) { return varSet[_idx]; }
 
-ModelVar &ModelVarUtil::GetVar(
-    const std::string &_name)
-{
-  return varSet[name2idx[_name]];
-}
+ModelVar& ModelVarUtil::GetVar(const xct::IntVar* _iv) { return varSet[iv2idx[_iv]]; }

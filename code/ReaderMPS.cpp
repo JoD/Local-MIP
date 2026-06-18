@@ -15,313 +15,42 @@
 =====================================================================================*/
 
 #include "ReaderMPS.h"
+#include "LocalCon.h"
+#include "LocalSearch/LocalMIP.h"
+#include "LocalVar.h"
 
-ReaderMPS::ReaderMPS(
-    ModelConUtil *_modelConUtil,
-    ModelVarUtil *_modelVarUtil)
-    : modelConUtil(_modelConUtil),
-      modelVarUtil(_modelVarUtil),
-      integralityMarker(false)
-{
-}
+ReaderMPS::ReaderMPS(LocalMIP& localmip)
+    : modelConUtil(localmip.modelConUtil),
+      modelVarUtil(localmip.modelVarUtil),
+      localConUtil(localmip.localConUtil),
+      localVarUtil(localmip.localVarUtil) {}
 
-ReaderMPS::~ReaderMPS()
-{
-}
-
-void ReaderMPS::Read(
-    const char *_filename)
-{
-  std::ifstream infile(_filename);
-  std::string modelName;
-  std::string tempStr;
-  char conType;
-  std::string conName;
-  std::string inverseConName;
-  size_t inverseConIdx;
-  size_t conIdx;
-  std::string varName;
-  Value coefficient;
-  Value rhs;
-  std::string varType;
-  Value inputBound;
-  if (!infile)
-  {
-    printf("o The input filename %s is invalid.\n", _filename);
-    exit(-1);
-  }
-  while (getline(infile, readLine)) // NAME section
-  {
-    if (readLine[0] == '*' ||
-        readLine.length() < 1)
-      continue;
-    if (readLine[0] == 'R' || readLine[0] == 'O')
-      break;
-    IssSetup();
-    if (!(iss >> tempStr >> modelName))
-      continue;
-    if (tempStr != "NAME")
-      PrintfError(readLine);
-    printf("c Model name: %s\n", modelName.c_str());
-  }
-  if (readLine[0] == 'O')
-  {
-    if (readLine.find("MAX") != std::string::npos)
-      modelConUtil->MIN = -1;
-    while (getline(infile, readLine))
-    {
-      if (readLine[0] == '*' || readLine.length() < 1)
-        continue;
-      if (readLine[0] == 'R')
-        break;
-      IssSetup();
-      iss >> tempStr;
-      std::cout << tempStr << std::endl;
-      if (tempStr == "MAX")
-        modelConUtil->MIN = -1;
-    }
-  }
-  modelConUtil->conSet.emplace_back("", 0); // obj
-  while (getline(infile, readLine))         // ROWS section
-  {
-    if (readLine[0] == '*' ||
-        readLine.length() < 1)
-      continue;
-    if (readLine[0] == 'C')
-      break;
-    IssSetup();
-    if (!(iss >> conType >> conName)){
-      if (!IsBlank(readLine)){
-        PrintfError(readLine);
-      }else{
-        continue;
-      }
-    }
-    if (conType == 'L')
-      conIdx = modelConUtil->MakeCon(conName);
-    else if (conType == 'E')
-    {
-      conIdx = modelConUtil->MakeCon(conName);
-      modelConUtil->conSet[conIdx].isEqual = true;
-      inverseConName = conName + "!";
-      inverseConIdx = modelConUtil->MakeCon(inverseConName);
-      modelConUtil->conSet[inverseConIdx].isEqual = true;
-    }
-    else if (conType == 'G')
-    {
-      conIdx = modelConUtil->MakeCon(conName);
-      modelConUtil->conSet[conIdx].isLarge = true;
-    }
-    else
-    {
-      assert(conType == 'N'); // type=='N',this con is obj
-      if (modelConUtil->objName != "")
-        PrintfError(readLine);
-      modelConUtil->objName = conName;
-    }
-  }
-  while (getline(infile, readLine)) // COLUMNS section
-  {
-    if (readLine[0] == '*' ||
-        readLine.length() < 1)
-      continue;
-    if (readLine[0] == 'R')
-      break;
-    IssSetup();
-    if (!(iss >> varName >> conName)){
-      if (!IsBlank(readLine)){
-        PrintfError(readLine);
-      }else{
-        continue;
-      }
-    }
-    if (conName == "\'MARKER\'")
-    {
-      iss >> tempStr;
-      if (tempStr != "\'INTORG\'" &&
-          tempStr != "\'INTEND\'")
-        PrintfError(readLine);
-      integralityMarker = !integralityMarker;
-      continue;
-    }
-    iss >> coefficient;
-    conIdx = modelConUtil->GetConIdx(conName);
-    PushCoeffVarIdx(conIdx, coefficient, varName);
-    if (modelConUtil->conSet[conIdx].isEqual)
-      PushCoeffVarIdx(conIdx + 1, -coefficient, varName);
-    if (iss >> conName)
-    {
-      iss >> coefficient;
-      conIdx = modelConUtil->GetConIdx(conName);
-      PushCoeffVarIdx(conIdx, coefficient, varName);
-      if (modelConUtil->conSet[conIdx].isEqual)
-        PushCoeffVarIdx(conIdx + 1, -coefficient, varName);
-    }
-  }
-  while (getline(infile, readLine)) // RHS  section
-  {
-    if (readLine[0] == '*' ||
-        readLine.length() < 1)
-      continue;
-    if (readLine[0] == 'B' ||
-        readLine[0] == 'E')
-      break;
-    if (readLine[0] == 'R' ||
-        readLine[0] == 'S') // do not handle RANGS and SOS
-      PrintfError(readLine);
-    IssSetup();
-    if (!(iss >> tempStr >> conName >> rhs)){
-      if (!IsBlank(readLine)){
-        PrintfError(readLine);
-      }else{
-        continue;
-      }
-    }
-    if (conName.length() < 1)
-      continue;
-    conIdx = modelConUtil->GetConIdx(conName);
-    modelConUtil->conSet[conIdx].RHS = rhs;
-    if (modelConUtil->conSet[conIdx].isEqual)
-      modelConUtil->conSet[conIdx + 1].RHS = -rhs;
-
-    if (iss >> conName)
-    {
-      iss >> rhs;
-      conIdx = modelConUtil->GetConIdx(conName);
-      modelConUtil->conSet[conIdx].RHS = rhs;
-      if (modelConUtil->conSet[conIdx].isEqual)
-        modelConUtil->conSet[conIdx + 1].RHS = -rhs;
-    }
-  }
-  while (getline(infile, readLine)) // BOUNDS section
-  {
-    if (readLine[0] == '*' ||
-        readLine.length() < 1)
-      continue;
-    if (readLine[0] == 'E')
-      break;
-    if (readLine[0] == 'I') // do not handle INDICATORS
-      PrintfError(readLine);
-    IssSetup();
-    if (!(iss >> varType >> tempStr >> varName)){
-      if (!IsBlank(readLine)){
-        PrintfError(readLine);
-      }else{
-        continue;
-      }
-    }
-    iss >> inputBound;
-    if (modelVarUtil->name2idx.find(varName) != modelVarUtil->name2idx.end())
-    {
-      auto &var = modelVarUtil->GetVar(varName);
-      if (var.type == VarType::Binary)
-      {
-        var.SetType(VarType::Integer);
-        var.SetUpperBound(InfiniteUpperBound);
-      }
-      if (varType == "UP")
-        var.SetUpperBound(inputBound);
-      else if (varType == "LO")
-        var.SetLowerBound(inputBound);
-      else if (varType == "BV")
-      {
-        var.SetType(VarType::Binary);
-        var.SetUpperBound(1.0);
-        var.SetLowerBound(0.0);
-      }
-      else if (varType == "LI")
-        var.SetLowerBound(inputBound);
-      else if (varType == "UI")
-        var.SetUpperBound(inputBound);
-      else if (varType == "FX")
-      {
-        var.SetLowerBound(inputBound);
-        var.SetUpperBound(inputBound);
-        var.SetType(VarType::Fixed);
-      }
-      else if (varType == "FR")
-      {
-        var.SetUpperBound(InfiniteUpperBound);
-        var.SetLowerBound(InfiniteLowerBound);
-      }
-      else if (varType == "MI")
-        var.SetLowerBound(InfiniteLowerBound);
-      else if (varType == "PL")
-        var.SetUpperBound(InfiniteUpperBound);
-    }
-    else
-      continue;
-  }
-  infile.close();
-  for (conIdx = 1; conIdx < modelConUtil->conSet.size(); ++conIdx)
-  {
-    auto &con = modelConUtil->conSet[conIdx];
-    if (con.isLarge)
-    {
-      for (Value &inverseCoefficient : con.coeffSet)
-        inverseCoefficient = -inverseCoefficient;
-      con.RHS = -con.RHS;
-    }
-  }
-  modelVarUtil->objBias = -modelConUtil->conSet[0].RHS;
-  modelConUtil->conNum = modelConUtil->conSet.size();
-  modelVarUtil->varNum = modelVarUtil->varSet.size();
-
-  if (!TightenBound() || !TightBoundGlobally())
-  {
-    printf("c model is infeasible.\n");
-    exit(-1);
-  }
-
-  SetVarType();
-  SetVarIdx2ObjIdx();
-}
-
-inline void ReaderMPS::IssSetup()
-{
-  iss.clear();
-  iss.str(readLine);
-  iss.seekg(0, std::ios::beg);
-}
-
-void ReaderMPS::PushCoeffVarIdx(
-    const size_t _conIdx,
-    Value _coeff,
-    const std::string &_varName)
-{
-  auto &con = modelConUtil->conSet[_conIdx];
-  size_t _varIdx = modelVarUtil->MakeVar(
-      _varName, integralityMarker);
-  auto &var = modelVarUtil->GetVar(_varIdx);
+void ReaderMPS::PushCoeffVarIdx(size_t _conIdx, Value _coeff, const xct::IntVar* _iv) {
+  auto& con = modelConUtil.conSet[_conIdx];
+  size_t _varIdx = modelVarUtil.MakeVar(_iv, localVarUtil);
+  auto& var = modelVarUtil.GetVar(_varIdx);
 
   var.conIdxSet.push_back(_conIdx);
   var.posInCon.push_back(con.varIdxSet.size());
-  if (_conIdx == 0)
-    _coeff *= modelConUtil->MIN;
   con.coeffSet.push_back(_coeff);
   con.varIdxSet.push_back(_varIdx);
   con.posInVar.push_back(var.conIdxSet.size() - 1);
+  // maintain term counts on append so live additions don't need a separate snapshot pass
+  con.termNum = con.varIdxSet.size();
+  var.termNum = var.conIdxSet.size();
 }
 
-bool ReaderMPS::TightenBound()
-{
-  for (size_t conIdx = 1; conIdx < modelConUtil->conNum; ++conIdx)
-  {
-    auto &modelCon = modelConUtil->conSet[conIdx];
-    if (modelCon.varIdxSet.size() == 1)
-      TightenBoundVar(modelCon);
-    if (modelCon.varIdxSet.size() == 0)
-    {
-      assert(modelCon.coeffSet.size() == 0 &&
-             modelCon.posInVar.size() == 0);
-      if (modelCon.RHS + 1e-6 >= 0)
-      {
+bool ReaderMPS::TightenBound() {
+  for (size_t conIdx = 1; conIdx < modelConUtil.conNum; ++conIdx) {
+    auto& modelCon = modelConUtil.conSet[conIdx];
+    if (modelCon.varIdxSet.size() == 1) TightenBoundVar(modelCon);
+    if (modelCon.varIdxSet.size() == 0) {
+      assert(modelCon.coeffSet.size() == 0 && modelCon.posInVar.size() == 0);
+      if (modelCon.RHS + 1e-6 >= 0) {
         modelCon.inferSAT = true;
         deleteConNum++;
-      }
-      else
-      {
-        printf("c con.rhs %lf\n", modelCon.RHS);
+      } else {
+        printf("c   LOCAL-MIP con.rhs %lf\n", modelCon.RHS);
         return false;
       }
     }
@@ -329,37 +58,32 @@ bool ReaderMPS::TightenBound()
   return true;
 }
 
-void ReaderMPS::TightenBoundVar(ModelCon &modelCon)
-{
+void ReaderMPS::TightenBoundVar(ModelCon& modelCon) {
   Value coeff = modelCon.coeffSet[0];
-  auto &modelvar = modelVarUtil->GetVar(modelCon.varIdxSet[0]);
+  auto& modelvar = modelVarUtil.GetVar(modelCon.varIdxSet[0]);
   Value newBound = (modelCon.RHS + FeasibilityTol) / coeff;
-  if (coeff > 0 && newBound < modelvar.upperBound) // x <= bound
+  if (coeff > 0 && newBound < modelvar.upperBound)  // x <= bound
     modelvar.SetUpperBound(newBound);
-  else if (coeff < 0 && modelvar.lowerBound < newBound) // x >= bound
+  else if (coeff < 0 && modelvar.lowerBound < newBound)  // x >= bound
     modelvar.SetLowerBound(newBound);
 }
 
-bool ReaderMPS::TightBoundGlobally()
-{
-  for (auto &modelVar : modelVarUtil->varSet)
-    if (modelVar.IsFixed())
-    {
+bool ReaderMPS::TightBoundGlobally() {
+  for (auto& modelVar : modelVarUtil.varSet)
+    if (modelVar.IsFixed()) {
       modelVar.SetType(VarType::Fixed);
       fixedIdxs.push_back(modelVar.idx);
     }
-  while (fixedIdxs.size() > 0)
-  {
+  while (fixedIdxs.size() > 0) {
     size_t removeVarIdx = fixedIdxs.back();
     fixedIdxs.pop_back();
     deleteVarNum++;
-    ModelVar &removeVar = modelVarUtil->GetVar(removeVarIdx);
+    ModelVar& removeVar = modelVarUtil.GetVar(removeVarIdx);
     Value removeVarValue = removeVar.lowerBound;
-    for (size_t termIdx = 0; termIdx < removeVar.conIdxSet.size(); termIdx++)
-    {
+    for (size_t termIdx = 0; termIdx < removeVar.conIdxSet.size(); termIdx++) {
       size_t conIdx = removeVar.conIdxSet[termIdx];
       size_t posInCon = removeVar.posInCon[termIdx];
-      ModelCon &modelCon = modelConUtil->GetCon(conIdx);
+      ModelCon& modelCon = modelConUtil.getCon(conIdx);
       Value coeff = modelCon.coeffSet[posInCon];
       size_t movedVarIdx = modelCon.varIdxSet.back();
       Value movedCoeff = modelCon.coeffSet.back();
@@ -367,41 +91,31 @@ bool ReaderMPS::TightBoundGlobally()
       modelCon.varIdxSet[posInCon] = movedVarIdx;
       modelCon.coeffSet[posInCon] = movedCoeff;
       modelCon.posInVar[posInCon] = movedPosInVar;
-      ModelVar &movedVar = modelVarUtil->GetVar(movedVarIdx);
+      ModelVar& movedVar = modelVarUtil.GetVar(movedVarIdx);
       assert(movedVar.conIdxSet[movedPosInVar] == conIdx);
       movedVar.posInCon[movedPosInVar] = posInCon;
       modelCon.varIdxSet.pop_back();
       modelCon.coeffSet.pop_back();
       modelCon.posInVar.pop_back();
       if (conIdx == 0)
-        modelVarUtil->objBias += coeff * removeVarValue;
-      else
-      {
+        modelVarUtil.objBias += coeff * removeVarValue;
+      else {
         modelCon.RHS -= coeff * removeVarValue;
-        if (modelCon.varIdxSet.size() == 1)
-        {
+        if (modelCon.varIdxSet.size() == 1) {
           TightenBoundVar(modelCon);
-          ModelVar &relatedVar = modelVarUtil->GetVar(modelCon.varIdxSet[0]);
-          if (relatedVar.type != VarType::Fixed &&
-              relatedVar.IsFixed())
-          {
+          ModelVar& relatedVar = modelVarUtil.GetVar(modelCon.varIdxSet[0]);
+          if (relatedVar.type != VarType::Fixed && relatedVar.IsFixed()) {
             relatedVar.SetType(VarType::Fixed);
             fixedIdxs.push_back(relatedVar.idx);
             inferVarNum++;
           }
-        }
-        else if (modelCon.varIdxSet.size() == 0)
-        {
-          assert(modelCon.coeffSet.size() == 0 &&
-                 modelCon.posInVar.size() == 0);
-          if (modelCon.RHS + 1e-2 >= 0)
-          {
+        } else if (modelCon.varIdxSet.size() == 0) {
+          assert(modelCon.coeffSet.size() == 0 && modelCon.posInVar.size() == 0);
+          if (modelCon.RHS + 1e-2 >= 0) {
             modelCon.inferSAT = true;
             deleteConNum++;
-          }
-          else
-          {
-            printf("c con.rhs %lf\n", modelCon.RHS);
+          } else {
+            printf("c   LOCAL-MIP con.rhs %lf\n", modelCon.RHS);
             return false;
           }
         }
@@ -411,56 +125,79 @@ bool ReaderMPS::TightBoundGlobally()
   return true;
 }
 
-bool ReaderMPS::SetVarType()
-{
-  for (size_t varIdx = 0; varIdx < modelVarUtil->varNum; varIdx++)
-  {
-    auto &modelVar = modelVarUtil->GetVar(varIdx);
+bool ReaderMPS::SetVarType() {
+  // Sync localCon.RHS with modelCon.RHS after TightBoundGlobally may have shifted it
+  // (by removeVarValue * coeff for each eliminated fixed variable). Skip conIdx 0:
+  // the objective's localCon.RHS is managed by InitState / UpdateBestSolution.
+  // For inferSAT constraints, force localCon.RHS = Infinity so SAT/UNSAT checks
+  // can never flip them into unsatConIdxs (the inferSAT criterion uses a looser
+  // tolerance than LocalCon::UNSAT, so they would otherwise leak in).
+  for (size_t conIdx = 1; conIdx < modelConUtil.conSet.size(); ++conIdx) {
+    auto& modelCon = modelConUtil.conSet[conIdx];
+    localConUtil.conSet[conIdx].RHS = modelCon.inferSAT ? Infinity : modelCon.RHS;
+  }
+  localVarUtil.binaryIdx.clear();
+  localVarUtil.binaryIdxPos.assign(modelVarUtil.varNum, -1);
+  for (size_t varIdx = 0; varIdx < modelVarUtil.varNum; varIdx++) {
+    auto& modelVar = modelVarUtil.GetVar(varIdx);
     modelVar.termNum = modelVar.conIdxSet.size();
-    if (modelVar.lowerBound >= modelVar.upperBound + FeasibilityTol)
-    {
-      printf(
-          "c %s LB: %lf; UB: %lf\n",
-          modelVar.name.c_str(), modelVar.lowerBound, modelVar.upperBound);
-      exit(-1);
+    if (modelVar.lowerBound >= modelVar.upperBound + FeasibilityTol) {
+      printf("c Inconsistent LS variable bounds: %s LB %lf UB %lf\n", modelVar.iv->name.c_str(), modelVar.lowerBound,
+             modelVar.upperBound);
+      return false;
     }
-    if (modelVar.IsFixed())
-    {
-      modelVarUtil->fixedNum++;
+    if (modelVar.IsFixed()) {
       modelVar.SetType(VarType::Fixed);
-    }
-    else if (modelVar.IsBinary())
-    {
-      modelVarUtil->binaryNum++;
+    } else if (modelVar.IsBinary()) {
       modelVar.SetType(VarType::Binary);
-    }
-    else if (modelVar.type == VarType::Integer)
-    {
-      modelVarUtil->integerNum++;
-    }
-    else
-    {
-      modelVar.SetType(VarType::Real);
-      modelVarUtil->realNum++;
+      localVarUtil.binaryIdxPos[varIdx] = static_cast<int64_t>(localVarUtil.binaryIdx.size());
+      localVarUtil.binaryIdx.push_back(varIdx);
+    } else {
+      assert(modelVar.type == VarType::Integer);
     }
   }
-  for (size_t conIdx = 0; conIdx < modelConUtil->conNum; conIdx++)
-  {
-    auto &modelCon = modelConUtil->GetCon(conIdx);
+  for (size_t conIdx = 0; conIdx < modelConUtil.conNum; conIdx++) {
+    auto& modelCon = modelConUtil.getCon(conIdx);
     modelCon.termNum = modelCon.varIdxSet.size();
-    if (modelCon.inferSAT)
-      assert(modelCon.termNum == 0);
+    if (modelCon.inferSAT) assert(modelCon.termNum == 0);
   }
-  if (modelVarUtil->integerNum > 0 ||
-      modelVarUtil->realNum > 0)
-    modelVarUtil->isBin = false;
   return true;
 }
 
-void ReaderMPS::SetVarIdx2ObjIdx()
-{
-  modelVarUtil->varIdx2ObjIdx.resize(modelVarUtil->varNum, -1);
-  const auto &modelObj = modelConUtil->conSet[0];
-  for (size_t idx = 0; idx < modelObj.termNum; ++idx)
-    modelVarUtil->varIdx2ObjIdx[modelObj.varIdxSet[idx]] = idx;
+// Remove every term of constraint _conIdx, swap-popping each occurrence out of the corresponding
+// variable's adjacency lists and fixing the back-reference of whichever (other) constraint's term
+// got moved into the freed slot. A variable refers to a constraint at most once (normalized input),
+// so the moved entry never belongs to _conIdx itself -- hence _conIdx's own arrays (still being
+// iterated) are never touched. The constraint's own arrays are cleared at the end.
+void ReaderMPS::ClearConstraintTerms(size_t _conIdx) {
+  auto& con = modelConUtil.getCon(_conIdx);
+  for (size_t t = 0; t < con.varIdxSet.size(); ++t) {
+    size_t varIdx = con.varIdxSet[t];
+    size_t posInVar = con.posInVar[t];  // index of this con within the var's adjacency
+    auto& var = modelVarUtil.GetVar(varIdx);
+    size_t last = var.conIdxSet.size() - 1;
+    if (posInVar != last) {
+      size_t movedConIdx = var.conIdxSet[last];
+      size_t movedPosInCon = var.posInCon[last];  // term index of var inside movedConIdx
+      var.conIdxSet[posInVar] = movedConIdx;
+      var.posInCon[posInVar] = movedPosInCon;
+      // movedConIdx's term at movedPosInCon now finds var at adjacency index posInVar
+      modelConUtil.getCon(movedConIdx).posInVar[movedPosInCon] = posInVar;
+    }
+    var.conIdxSet.pop_back();
+    var.posInCon.pop_back();
+    var.termNum = var.conIdxSet.size();
+  }
+  con.coeffSet.clear();
+  con.varIdxSet.clear();
+  con.posInVar.clear();
+  con.termNum = 0;
+}
+
+void ReaderMPS::SetVarIdx2ObjIdx() {
+  // Fully reset: on a live objective change, stale entries from the previous objective must be cleared.
+  std::fill(modelVarUtil.varIdx2ObjIdx.begin(), modelVarUtil.varIdx2ObjIdx.end(), static_cast<size_t>(-1));
+  modelVarUtil.varIdx2ObjIdx.resize(modelVarUtil.varNum, -1);
+  const auto& modelObj = modelConUtil.conSet[0];
+  for (size_t idx = 0; idx < modelObj.termNum; ++idx) modelVarUtil.varIdx2ObjIdx[modelObj.varIdxSet[idx]] = idx;
 }

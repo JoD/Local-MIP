@@ -16,41 +16,29 @@
 
 #include "LocalMIP.h"
 
-int LocalMIP::LocalSearch(
-    Value _optimalObj,
-    std::chrono::_V2::system_clock::time_point _clkStart)
-{
-  Allocate();
+int32_t LocalMIP::LocalSearch(const std::function<bool()>& stop_condition,
+                              const std::function<void(double, const std::vector<LocalVar>&)>& update_sol,
+                              const std::function<void()>& apply_changes) {
   InitSolution();
   InitState();
-  auto &localObj = localConUtil.conSet[0];
+  auto& localObj = localConUtil.conSet[0];
   curStep = 0;
-  while (true)
-  {
-    if (DEBUG)
-      printf("\nc UNSAT Size: %-10ld; ", localConUtil.unsatConIdxs.size());
-    if (localConUtil.unsatConIdxs.empty())
-    {
-      if (!isFoundFeasible || localObj.LHS < localObj.RHS)
-      {
+  while (true) {
+    apply_changes();  // drain externally-fixed units etc.; invariants (LHS, unsat list) hold here
+    if (localConUtil.unsatConIdxs.empty()) {
+      if (!isFoundFeasible || localObj.LHS < localObj.RHS) {
         UpdateBestSolution();
-        LogObj(_clkStart);
+        update_sol(GetObjValue(), localVarUtil.varSet);
         isFoundFeasible = true;
       }
       bool res = LiftMoveWithoutBreak();
-      if (GetObjValue() <= _optimalObj)
-        return 1;
       ++curStep;
-      if (Timeout(_clkStart))
-        break;
-      if (res)
-        continue;
+      if (stop_condition()) break;
+      if (res) continue;
     }
-    if (Timeout(_clkStart))
-      break;
-    if (!UnsatTightMove())
-    {
-      if (mt() % 10000 > smoothProbability)
+    if (stop_condition()) break;
+    if (!UnsatTightMove()) {
+      if (mt() % 32768 > smoothProbability)
         UpdateWeight();
       else
         SmoothWeight();
@@ -61,33 +49,10 @@ int LocalMIP::LocalSearch(
   return 0;
 }
 
-bool LocalMIP::Timeout(
-    std::chrono::_V2::system_clock::time_point &_clkStart)
-{
-  auto clk_now = std::chrono::high_resolution_clock::now();
-  auto solve_time =
-      std::chrono::duration_cast<std::chrono::seconds>(clk_now - _clkStart).count();
-  if (solve_time >= CUTOFF)
-    return true;
-  return false;
-}
-
-void LocalMIP::LogObj(
-    std::chrono::_V2::system_clock::time_point &_clkStart)
-{
-  auto clk = TimeNow();
-  printf(
-      "n %-20f %lf\n",
-      (GetObjValue()),
-      ElapsedTime(clk, _clkStart));
-}
-
-void LocalMIP::InitSolution()
-{
-  for (size_t varIdx = 0; varIdx < modelVarUtil->varNum; varIdx++)
-  {
-    auto &localVar = localVarUtil.GetVar(varIdx);
-    const auto &modelVar = modelVarUtil->GetVar(varIdx);
+void LocalMIP::InitSolution() {
+  for (size_t varIdx = 0; varIdx < modelVarUtil.varNum; varIdx++) {
+    auto& localVar = localVarUtil.GetVar(varIdx);
+    const auto& modelVar = modelVarUtil.GetVar(varIdx);
     if (modelVar.lowerBound > 0)
       localVar.nowValue = modelVar.lowerBound;
     else if (modelVar.upperBound < 0)
@@ -98,274 +63,170 @@ void LocalMIP::InitSolution()
   }
 }
 
-void LocalMIP::PrintResult()
-{
+void LocalMIP::PrintResult() const {
   if (!isFoundFeasible)
-    printf("o no feasible solution found.\n");
-  else if (VerifySolution())
-  {
-    printf("o Best objective: %lf\n", GetObjValue());
-    // printf("B 1 %lf\n", GetObjValue());
-    if (PRINTSOL)
-      PrintSol();
+    printf("c   LOCAL-MIP no feasible solution found.\n");
+  else {
+    printf("c   LOCAL-MIP Best objective: %lf\n", GetObjValue());
   }
-  else
-    std::cout << "solution verify failed." << std::endl;
 }
 
-void LocalMIP::InitState()
-{
-  for (size_t conIdx = 1; conIdx < modelConUtil->conNum; ++conIdx)
-  {
-    auto &localCon = localConUtil.conSet[conIdx];
-    auto &modelCon = modelConUtil->conSet[conIdx];
-    localCon.LHS = 0;
-    for (size_t termIdx = 0; termIdx < modelCon.termNum; ++termIdx)
-      localCon.LHS +=
-          modelCon.coeffSet[termIdx] *
-          localVarUtil.GetVar(modelCon.varIdxSet[termIdx]).nowValue;
-    if (localCon.UNSAT())
-      localConUtil.insertUnsat(conIdx);
-  }
-  auto &localObj = localConUtil.conSet[0];
-  auto &modelObj = modelConUtil->conSet[0];
+// Compute conIdx's LHS from the current assignment. For real constraints (conIdx != 0) also insert
+// into the unsat list if violated. Reused by InitState and by live constraint addition.
+void LocalMIP::InitConstraint(size_t _conIdx) {
+  auto& localCon = localConUtil.conSet[_conIdx];
+  auto& modelCon = modelConUtil.conSet[_conIdx];
+  localCon.LHS = 0;
+  for (size_t termIdx = 0; termIdx < modelCon.termNum; ++termIdx)
+    localCon.LHS += modelCon.coeffSet[termIdx] * localVarUtil.GetVar(modelCon.varIdxSet[termIdx]).nowValue;
+  if (_conIdx != 0 && localCon.UNSAT()) localConUtil.insertUnsat(_conIdx);
+}
+
+void LocalMIP::InitState() {
+  isKeepFeas = false;
+  isFoundFeasible = false;
+  bestOBJ = Infinity;
+
+  for (size_t conIdx = 1; conIdx < modelConUtil.conNum; ++conIdx) InitConstraint(conIdx);
+  auto& localObj = localConUtil.conSet[0];
   localObj.RHS = Infinity;
-  localObj.LHS = 0;
-  for (size_t termIdx = 0; termIdx < modelObj.termNum; ++termIdx)
-    localObj.LHS +=
-        modelObj.coeffSet[termIdx] *
-        localVarUtil.GetVar(modelObj.varIdxSet[termIdx]).nowValue;
+  InitConstraint(0);  // computes localObj.LHS (conIdx 0 => no unsat bookkeeping)
+  isInitialized = true;
 }
 
-void LocalMIP::UpdateBestSolution()
-{
-  lastImproveStep = curStep;
-  for (auto &localVar : localVarUtil.varSet)
-    localVar.bestValue = localVar.nowValue;
-  auto &localObj = localConUtil.conSet[0];
-  // auto &modelObj = modelConUtil->conSet[0]; // unused?
+void LocalMIP::UpdateBestSolution() {
+  for (auto& localVar : localVarUtil.varSet) localVar.bestValue = localVar.nowValue;
+  auto& localObj = localConUtil.conSet[0];
   bestOBJ = localObj.LHS;
   localObj.RHS = bestOBJ - OptimalTol;
 }
 
-void LocalMIP::ApplyMove(
-    size_t _varIdx,
-    Value _delta)
-{
-  auto &localVar = localVarUtil.GetVar(_varIdx);
-  auto &modelVar = modelVarUtil->GetVar(_varIdx);
+void LocalMIP::ApplyMove(size_t _varIdx, Value _delta) {
+  auto& localVar = localVarUtil.GetVar(_varIdx);
+  auto& modelVar = modelVarUtil.GetVar(_varIdx);
   localVar.nowValue += _delta;
-  if (DEBUG)
-    printf("varType: %d; varIdx: %-10ld; delta: %-10lf; ",
-           static_cast<int>(modelVar.type), _varIdx, _delta);
-  for (size_t termIdx = 0; termIdx < modelVar.termNum; ++termIdx)
-  {
+  for (size_t termIdx = 0; termIdx < modelVar.termNum; ++termIdx) {
     size_t conIdx = modelVar.conIdxSet[termIdx];
-    // size_t posInCon = modelVar.posInCon[termIdx]; // unused?
-    auto &localCon = localConUtil.conSet[conIdx];
-    auto &modelCon = modelConUtil->conSet[conIdx];
+    auto& localCon = localConUtil.conSet[conIdx];
+    auto& modelCon = modelConUtil.conSet[conIdx];
     Value newLHS = 0;
     for (size_t termIdx = 0; termIdx < modelCon.termNum; ++termIdx)
-      newLHS +=
-          modelCon.coeffSet[termIdx] *
-          localVarUtil.GetVar(modelCon.varIdxSet[termIdx]).nowValue;
+      newLHS += modelCon.coeffSet[termIdx] * localVarUtil.GetVar(modelCon.varIdxSet[termIdx]).nowValue;
     if (conIdx == 0)
       localCon.LHS = newLHS;
-    else
-    {
+    else {
       bool isPreSat = localCon.SAT();
       bool isNowSat = newLHS < localCon.RHS + FeasibilityTol;
       if (isPreSat && !isNowSat)
         localConUtil.insertUnsat(conIdx);
       else if (!isPreSat && isNowSat)
-        localConUtil.RemoveUnsat(conIdx);
+        localConUtil.removeUnsat(conIdx);
       localCon.LHS = newLHS;
     }
   }
-  if (_delta > 0)
-  {
+  if (_delta > 0) {
     localVar.lastIncStep = curStep;
-    localVar.allowDecStep =
-        curStep + tabuBase + mt() % tabuVariation;
+    localVar.allowDecStep = curStep + tabuBase + mt() % tabuVariation;
+  } else {
+    localVar.lastDecStep = curStep;
+    localVar.allowIncStep = curStep + tabuBase + mt() % tabuVariation;
   }
+}
+
+Value LocalMIP::GetObjValue() const { return bestOBJ + modelVarUtil.objBias; }
+
+LocalMIP::LocalMIP() { mt.seed(2832); }
+
+// ---- Incremental API ----------------------------------------------------------------------------
+
+void LocalMIP::addBinaryIdx(size_t _varIdx) {
+  if (localVarUtil.binaryIdxPos[_varIdx] >= 0) return;  // already present
+  localVarUtil.binaryIdxPos[_varIdx] = static_cast<int64_t>(localVarUtil.binaryIdx.size());
+  localVarUtil.binaryIdx.push_back(_varIdx);
+}
+
+void LocalMIP::removeBinaryIdx(size_t _varIdx) {
+  int64_t pos = localVarUtil.binaryIdxPos[_varIdx];
+  if (pos < 0) return;  // not present
+  auto& binaryIdx = localVarUtil.binaryIdx;
+  size_t last = binaryIdx.size() - 1;
+  if (static_cast<size_t>(pos) != last) {
+    binaryIdx[pos] = binaryIdx[last];
+    localVarUtil.binaryIdxPos[binaryIdx[pos]] = pos;
+  }
+  binaryIdx.pop_back();
+  localVarUtil.binaryIdxPos[_varIdx] = -1;
+}
+
+void LocalMIP::setVarBounds(size_t _varIdx, Value _newLb, Value _newUb, bool _retractable) {
+  auto& modelVar = modelVarUtil.GetVar(_varIdx);
+  if (_retractable) boundSaveStack.push_back({_varIdx, modelVar.lowerBound, modelVar.upperBound, modelVar.type});
+  modelVar.lowerBound = _newLb;
+  modelVar.upperBound = _newUb;
+  if (!isInitialized) return;  // SetVarType / InitSolution / InitState will handle the rest at run start
+
+  VarType newType;
+  if (fabs(_newLb - _newUb) < FeasibilityTol)
+    newType = VarType::Fixed;
+  else if (fabs(_newLb) < FeasibilityTol && fabs(_newUb - 1.0) < FeasibilityTol)
+    newType = VarType::Binary;
   else
-  {
-    localVar.lastDecStep = curStep;
-    localVar.allowIncStep =
-        curStep + tabuBase + mt() % tabuVariation;
-  }
+    newType = VarType::Integer;
+  if (newType == VarType::Binary)
+    addBinaryIdx(_varIdx);  // FlipMove asserts type==Binary for everything in binaryIdx
+  else
+    removeBinaryIdx(_varIdx);
+  modelVar.type = newType;
+
+  // Project the current value into the new range. ApplyMove recomputes the LHS of all incident
+  // constraints (incl. the objective) and keeps the unsat list consistent.
+  auto& localVar = localVarUtil.GetVar(_varIdx);
+  Value target = localVar.nowValue;
+  if (target < _newLb) target = _newLb;
+  if (target > _newUb) target = _newUb;
+  if (target != localVar.nowValue) ApplyMove(_varIdx, target - localVar.nowValue);
 }
 
-void LocalMIP::Restart()
-{
-  lastImproveStep = curStep;
-  ++restartTimes;
-  for (auto unsatIdx : localConUtil.unsatConIdxs)
-    localConUtil.RemoveUnsat(unsatIdx);
-  for (size_t varIdx = 0; varIdx < modelVarUtil->varNum; varIdx++)
-  {
-    auto &localVar = localVarUtil.GetVar(varIdx);
-    auto &modelVar = modelVarUtil->GetVar(varIdx);
-    if (modelVar.type == VarType::Binary)
-      localVar.nowValue = mt() % 2;
-    else if (modelVar.type == VarType::Integer &&
-             modelVar.lowerBound > -1e15 &&
-             modelVar.upperBound < 1e15)
-    {
-      long long lowerBound = (long long)modelVar.lowerBound;
-      long long upperBound = (long long)modelVar.upperBound;
-      localVar.nowValue = modelVar.lowerBound + (mt() % (upperBound + 1 - lowerBound));
-      // printf("c %lf; %lf; %lld; %lf; %lld\n",
-      //        localVar.nowValue, modelVar.lowerBound, lowerBound, modelVar.upperBound, upperBound);
-    }
+void LocalMIP::popVarBoundsTo(size_t _target) {
+  while (boundSaveStack.size() > _target) {
+    BoundSave s = boundSaveStack.back();
+    boundSaveStack.pop_back();
+    auto& modelVar = modelVarUtil.GetVar(s.varIdx);
+    modelVar.lowerBound = s.lowerBound;
+    modelVar.upperBound = s.upperBound;
+    if (s.type == VarType::Binary)
+      addBinaryIdx(s.varIdx);
     else
-    {
-      if (modelVar.lowerBound > 0)
-        localVar.nowValue = modelVar.lowerBound;
-      else if (modelVar.upperBound < 0)
-        localVar.nowValue = modelVar.upperBound;
-      else
-        localVar.nowValue = 0;
-    }
-    assert(modelVar.InBound(localVar.nowValue));
-    if (isFoundFeasible && mt() % 100 > 50)
-      localVar.nowValue = localVar.bestValue;
-    localVar.lastDecStep = curStep;
-    localVar.allowIncStep = 0;
-    localVar.lastIncStep = curStep;
-    localVar.allowDecStep = 0;
-  }
-  for (size_t conIdx = 1; conIdx < modelConUtil->conNum; ++conIdx)
-  {
-    auto &localCon = localConUtil.conSet[conIdx];
-    auto &modelCon = modelConUtil->conSet[conIdx];
-    localCon.LHS = 0;
-    for (size_t termIdx = 0; termIdx < modelCon.termNum; ++termIdx)
-      localCon.LHS +=
-          modelCon.coeffSet[termIdx] *
-          localVarUtil.GetVar(modelCon.varIdxSet[termIdx]).nowValue;
-    if (localCon.UNSAT())
-      localConUtil.insertUnsat(conIdx);
-    localCon.weight = 1;
-  }
-  auto &localObj = localConUtil.conSet[0];
-  auto &modelObj = modelConUtil->conSet[0];
-  localObj.LHS = 0;
-  localObj.weight = 1;
-  for (size_t termIdx = 0; termIdx < modelObj.termNum; ++termIdx)
-    localObj.LHS +=
-        modelObj.coeffSet[termIdx] *
-        localVarUtil.GetVar(modelObj.varIdxSet[termIdx]).nowValue;
-}
-
-bool LocalMIP::VerifySolution()
-{
-  for (size_t var_idx = 0; var_idx < modelVarUtil->varNum; var_idx++)
-  {
-    auto &var = localVarUtil.GetVar(var_idx);
-    auto &modelVar = modelVarUtil->GetVar(var_idx);
-    if (!modelVar.InBound(var.bestValue))
-      return false;
-  }
-
-  for (size_t conIdx = 1; conIdx < modelConUtil->conNum; ++conIdx)
-  {
-    // auto &con = localConUtil.conSet[conIdx]; // unused?
-    auto &modelCon = modelConUtil->conSet[conIdx];
-    Value lhs = 0;
-    for (size_t termIdx = 0; termIdx < modelCon.termNum; ++termIdx)
-      lhs +=
-          modelCon.coeffSet[termIdx] *
-          localVarUtil.GetVar(modelCon.varIdxSet[termIdx]).bestValue;
-    if (lhs > modelCon.RHS + FeasibilityTol)
-    {
-      printf("c lhs: %lf; rhs: %lf\n", lhs, modelCon.RHS);
-      return false;
-    }
-  }
-  // Obj
-  // auto &localObj = localConUtil.conSet[0]; // unused?
-  auto &modelObj = modelConUtil->conSet[0];
-  Value objValue = 0;
-  for (size_t termIdx = 0; termIdx < modelObj.termNum; ++termIdx)
-    objValue +=
-        modelObj.coeffSet[termIdx] *
-        localVarUtil.GetVar(modelObj.varIdxSet[termIdx]).bestValue;
-  // printf("c %lf; %lf\n", objValue, bestOBJ);
-  return fabs(objValue - bestOBJ) < 1e-3;
-}
-
-void LocalMIP::PrintSol()
-{
-  printf("c best-found solution:\n");
-  printf("%-50s        %s\n", "Variable name", "Variable value");
-  for (size_t varIdx = 0; varIdx < modelVarUtil->varNum; varIdx++)
-  {
-    const auto &var = localVarUtil.GetVar(varIdx);
-    const auto &modelVar = modelVarUtil->GetVar(varIdx);
-    if (var.bestValue)
-      printf("%-50s        %lf\n", modelVar.name.c_str(), var.bestValue);
+      removeBinaryIdx(s.varIdx);
+    modelVar.type = s.type;
+    // nowValue stays as-is: restored bounds are no tighter than the ones we set, and the value was
+    // projected into the tighter range, so it remains within the restored range. No LHS recompute.
   }
 }
 
-void LocalMIP::Allocate()
-{
-  liftStep = 0;
-  breakStep = 0;
-  tightStepUnsat = 0;
-  tightStepSat = 0;
-  flipStep = 0;
-  randomStep = 0;
-  restartTimes = 0;
-  smoothProbability = 3;
-  tabuBase = 3;
-  tabuVariation = 10;
-  isBin = modelVarUtil->isBin;
+void LocalMIP::addConstraintLive(size_t _conIdx) {
+  // termNum and conNum are maintained on append (MakeCon/PushCoeffVarIdx); only the live search
+  // state needs folding in.
+  InitConstraint(_conIdx);
+}
+
+void LocalMIP::reinitObjective(size_t _objTermNum) {
+  auto& v2o = modelVarUtil.varIdx2ObjIdx;
+  std::fill(v2o.begin(), v2o.end(), static_cast<size_t>(-1));
+  v2o.resize(modelVarUtil.varNum, static_cast<size_t>(-1));
+  const auto& modelObj = modelConUtil.conSet[0];
+  for (size_t idx = 0; idx < modelObj.termNum; ++idx) v2o[modelObj.varIdxSet[idx]] = idx;
+
+  localVarUtil.lowerDeltaInLiftMove.resize(_objTermNum);
+  localVarUtil.upperDeltaInLifiMove.resize(_objTermNum);
+
+  // Constraints and the assignment are unchanged, so the unsat list stays valid; only the notion of
+  // "best" is reset so the search re-evaluates the incumbent under the new objective.
   isKeepFeas = false;
   isFoundFeasible = false;
-  weightUpperBound = 10000000;
-  objWeightUpperBound = 10000000;
-  lastImproveStep = 0;
-  sampleUnsat = 12;
-  bmsUnsatInfeas = 2000;
-  bmsUnsatFeas = 3000;
-  sampleSat = 20;
-  bmsSat = 190;
-  bmsFlip = 20;
-  bmsRandom = 150;
   bestOBJ = Infinity;
-  localVarUtil.Allocate(
-      modelVarUtil->varNum,
-      modelConUtil->conSet[0].varIdxSet.size());
-  localConUtil.Allocate(modelConUtil->conNum);
-  for (size_t conIdx = 1; conIdx < modelConUtil->conNum; conIdx++)
-    localConUtil.conSet[conIdx].RHS = modelConUtil->conSet[conIdx].RHS;
-  for (size_t varIdx = 0; varIdx < modelVarUtil->varNum; varIdx++)
-  {
-    auto &modelVar = modelVarUtil->GetVar(varIdx);
-    if (modelVar.type == VarType::Binary)
-      localVarUtil.binaryIdx.push_back(varIdx);
-  }
-  mt.seed(2832);
-}
-
-Value LocalMIP::GetObjValue()
-{
-  return modelConUtil->MIN * (bestOBJ + modelVarUtil->objBias);
-}
-
-LocalMIP::LocalMIP(
-    const ModelConUtil *_modelConUtil,
-    const ModelVarUtil *_modelVarUtil,
-    bool debug, bool printsol, double cutoff)
-    : modelConUtil(_modelConUtil),
-      modelVarUtil(_modelVarUtil),
-      DEBUG(debug),
-      PRINTSOL(printsol),
-      CUTOFF(cutoff)
-{
-}
-
-LocalMIP::~LocalMIP()
-{
+  auto& localObj = localConUtil.conSet[0];
+  localObj.RHS = Infinity;
+  localObj.weight = 1;
+  InitConstraint(0);
 }

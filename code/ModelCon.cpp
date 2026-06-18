@@ -16,74 +16,15 @@
 
 #include "ModelCon.h"
 
-ModelCon::ModelCon(
-    const std::string &_name,
-    const size_t _idx)
-    : name(_name),
-      idx(_idx),
-      isEqual(false),
-      isLarge(false),
-      RHS(0),
-      inferSAT(false),
-      termNum(-1)
-{
-}
+ModelCon::ModelCon(size_t _idx) : idx(_idx), RHS(0), inferSAT(false), termNum(0) {}
 
-ModelCon::~ModelCon()
-{
-  coeffSet.clear();
-  varIdxSet.clear();
-  posInVar.clear();
-}
-
-ModelConUtil::ModelConUtil()
-    : conNum(-1)
-{
-}
-
-ModelConUtil::~ModelConUtil()
-{
-  conSet.clear();
-  name2idx.clear();
-}
-
-size_t ModelConUtil::MakeCon(
-    const std::string &_name)
-{
-  auto iter = name2idx.find(_name);
-  if (iter != name2idx.end())
-    return iter->second;
+size_t ModelConUtil::MakeCon() {
   size_t conIdx = conSet.size();
-  conSet.emplace_back(_name, conIdx);
-  name2idx[_name] = conIdx;
+  conSet.emplace_back(conIdx);
+  conNum = conSet.size();  // maintain on append for incremental use
   return conIdx;
 }
 
-size_t ModelConUtil::GetConIdx(
-    const std::string &_name)
-{
-  if (_name == objName)
-    return 0;
-  auto iter = name2idx.find(_name);
-  return iter->second;
-}
+const ModelCon& ModelConUtil::getCon(size_t _idx) const { return conSet[_idx]; }
 
-const ModelCon &ModelConUtil::GetCon(
-    const size_t _idx) const
-{
-  return conSet[_idx];
-}
-
-ModelCon &ModelConUtil::GetCon(
-    const size_t _idx)
-{
-  return conSet[_idx];
-}
-
-ModelCon &ModelConUtil::GetCon(
-    const std::string &_name)
-{
-  if (_name == objName)
-    return conSet[0];
-  return conSet[name2idx[_name]];
-}
+ModelCon& ModelConUtil::getCon(size_t _idx) { return conSet[_idx]; }

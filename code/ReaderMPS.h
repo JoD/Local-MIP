@@ -18,34 +18,28 @@
 #include "ModelCon.h"
 #include "ModelVar.h"
 
-class ReaderMPS
-{
-public:
-  ModelConUtil *modelConUtil;
-  ModelVarUtil *modelVarUtil;
+struct LocalConUtil;
+struct LocalVarUtil;
+class LocalMIP;
+
+struct ReaderMPS {
+  ModelConUtil& modelConUtil;
+  ModelVarUtil& modelVarUtil;
+  LocalConUtil& localConUtil;
+  LocalVarUtil& localVarUtil;
   std::istringstream iss;
   std::string readLine;
-  bool integralityMarker;
   bool TightenBound();
-  void TightenBoundVar(ModelCon &_modelCon);
+  void TightenBoundVar(ModelCon& _modelCon);
   bool TightBoundGlobally();
   bool SetVarType();
   void SetVarIdx2ObjIdx();
+  void ClearConstraintTerms(size_t _conIdx);  // remove all terms of a constraint, patching var adjacency
   std::vector<size_t> fixedIdxs;
   size_t deleteConNum;
   size_t deleteVarNum;
   size_t inferVarNum;
-  inline void IssSetup();
-  void PushCoeffVarIdx(
-      const size_t _conIdx,
-      Value _coeff,
-      const std::string &_varName);
+  void PushCoeffVarIdx(size_t _conIdx, Value _coeff, const xct::IntVar* _iv);
 
-public:
-  ReaderMPS(
-      ModelConUtil *_modelConUtil,
-      ModelVarUtil *_modelVarUtil);
-  ~ReaderMPS();
-  void Read(
-      const char *_fileName);
+  ReaderMPS(LocalMIP& localmip);
 };

@@ -17,37 +17,23 @@
 #pragma once
 #include "utils/header.h"
 
-class LocalCon
-{
-public:
-  size_t weight;
-  size_t posInUnsatConIdxs;
-  Value RHS;
-  Value LHS;
+struct LocalCon {
+  size_t weight = 1;
+  size_t posInUnsatConIdxs = 0;
+  Value RHS = 0;
+  Value LHS = 0;
 
-  LocalCon();
-  ~LocalCon();
-  bool SAT();
-  bool UNSAT();
+  bool SAT() const;
+  bool UNSAT() const;
 };
 
-class LocalConUtil
-{
-public:
+struct LocalConUtil {
   std::vector<LocalCon> conSet;
   std::vector<size_t> unsatConIdxs;
   std::vector<size_t> tempUnsatConIdxs;
   std::vector<size_t> tempSatConIdxs;
-  std::unordered_set<size_t> sampleSet;
 
-  LocalConUtil();
-  ~LocalConUtil();
-  void Allocate(
-      const size_t _conNum);
-  LocalCon &GetCon(
-      const size_t _idx);
-  void insertUnsat(
-      const size_t _conIdx);
-  void RemoveUnsat(
-      const size_t _conIdx);
+  LocalCon& getCon(size_t _idx);
+  void insertUnsat(size_t _conIdx);
+  void removeUnsat(size_t _conIdx);
 };

@@ -17,13 +17,8 @@
 #pragma once
 #include "utils/header.h"
 
-class ModelCon
-{
-public:
-  std::string name;
+struct ModelCon {
   size_t idx;
-  bool isEqual;
-  bool isLarge;
   std::vector<Value> coeffSet;
   std::vector<size_t> varIdxSet;
   std::vector<size_t> posInVar;
@@ -31,31 +26,15 @@ public:
   bool inferSAT;
   size_t termNum;
 
-  ModelCon(
-      const std::string &_name,
-      const size_t _idx);
-  ~ModelCon();
+  ModelCon(size_t _idx);
 };
 
-class ModelConUtil
-{
-public:
-  std::unordered_map<std::string, size_t> name2idx;
+struct ModelConUtil {
   std::vector<ModelCon> conSet;
   std::string objName;
-  size_t conNum;
-  int MIN = 1;
+  size_t conNum = -1;
 
-  ModelConUtil();
-  ~ModelConUtil();
-  size_t MakeCon(
-      const std::string &_name);
-  size_t GetConIdx(
-      const std::string &_name);
-  const ModelCon &GetCon(
-      const size_t _idx) const;
-  ModelCon &GetCon(
-      const size_t _idx);
-  ModelCon &GetCon(
-      const std::string &_name);
+  size_t MakeCon();
+  const ModelCon& getCon(size_t _idx) const;
+  ModelCon& getCon(size_t _idx);
 };

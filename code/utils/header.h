@@ -16,22 +16,20 @@
 
 #pragma once
 
+#include <stdlib.h>
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <fstream>
 #include <iostream>
+#include <limits>
+#include <random>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <unordered_map>
-#include <limits>
-#include <unordered_set>
-#include <random>
-#include <algorithm>
-#include <cmath>
-#include <sstream>
-#include <fstream>
-#include <sys/time.h>
-#include <stdlib.h>
-#include <chrono>
-// using namespace std;
+#include "../../../auxiliary.hpp"
+#include "../../../interface//IntConstraint.hpp"
+
 using Value = double;
 const Value Infinity = 1e20;
 const Value NegativeInfinity = -Infinity;
@@ -42,18 +40,4 @@ const Value InfiniteUpperBound = Infinity;
 const Value InfiniteLowerBound = NegativeInfinity;
 const Value FeasibilityTol = 1e-6;
 const Value OptimalTol = 1e-4;
-enum class VarType
-{
-    Binary,
-    Integer,
-    Real,
-    Fixed
-};
-std::chrono::_V2::system_clock::time_point TimeNow();
-double ElapsedTime(
-    const std::chrono::_V2::system_clock::time_point &a,
-    const std::chrono::_V2::system_clock::time_point &b);
-bool IsBlank(
-    const std::string &a);
-void PrintfError(
-    const std::string &a);
+enum class VarType { Binary, Integer, Fixed };

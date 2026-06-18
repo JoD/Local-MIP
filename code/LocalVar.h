@@ -17,37 +17,25 @@
 #pragma once
 #include "utils/header.h"
 
-class LocalVar
-{
-public:
-  Value nowValue;
-  Value bestValue;
-  size_t allowIncStep;
-  size_t allowDecStep;
-  size_t lastIncStep;
-  size_t lastDecStep;
-
-  LocalVar();
-  ~LocalVar();
+struct LocalVar {
+  Value nowValue = 0;
+  Value bestValue = 0;
+  size_t allowIncStep = 0;
+  size_t allowDecStep = 0;
+  size_t lastIncStep = 0;
+  size_t lastDecStep = 0;
 };
 
-class LocalVarUtil
-{
-public:
+struct LocalVarUtil {
   std::vector<LocalVar> varSet;
   std::vector<Value> lowerDeltaInLiftMove;
   std::vector<Value> upperDeltaInLifiMove;
   std::vector<Value> tempDeltas;
   std::vector<size_t> tempVarIdxs;
-  std::vector<bool> scoreTable;
+  std::vector<uint8_t> scoreTable;
   std::vector<size_t> binaryIdx;
-  std::unordered_set<size_t> affectedVar;
+  std::vector<int64_t> binaryIdxPos;  // position of each var within binaryIdx, or -1 if absent
+  unordered_set<size_t> affectedVar;
 
-  LocalVarUtil();
-  ~LocalVarUtil();
-  void Allocate(
-      size_t _varNum,
-      size_t _varNumInObj);
-  LocalVar &GetVar(
-      size_t _idx);
+  LocalVar& GetVar(size_t _idx);
 };

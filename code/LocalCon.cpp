@@ -16,72 +16,23 @@
 
 #include "LocalCon.h"
 
-LocalCon::LocalCon()
-    : weight(1),
-      RHS(0),
-      LHS(0)
-{
-}
+bool LocalCon::SAT() const { return LHS < RHS + FeasibilityTol; }
 
-LocalCon::~LocalCon()
-{
-}
+bool LocalCon::UNSAT() const { return LHS >= RHS + FeasibilityTol; }
 
-bool LocalCon::SAT()
-{
-  return LHS < RHS + FeasibilityTol;
-}
+LocalCon& LocalConUtil::getCon(size_t _idx) { return conSet[_idx]; }
 
-bool LocalCon::UNSAT()
-{
-  return LHS >= RHS + FeasibilityTol;
-}
-
-LocalConUtil::LocalConUtil()
-{
-}
-
-void LocalConUtil::Allocate(
-    const size_t _conNum)
-{
-  unsatConIdxs.reserve(_conNum);
-  tempSatConIdxs.reserve(_conNum);
-  tempUnsatConIdxs.reserve(_conNum);
-  conSet.resize(_conNum);
-}
-
-LocalConUtil::~LocalConUtil()
-{
-  tempSatConIdxs.clear();
-  tempUnsatConIdxs.clear();
-  conSet.clear();
-  unsatConIdxs.clear();
-}
-
-LocalCon &LocalConUtil::GetCon(
-    const size_t _idx)
-{
-  return conSet[_idx];
-}
-
-void LocalConUtil::insertUnsat(
-    const size_t _conIdx)
-{
+void LocalConUtil::insertUnsat(size_t _conIdx) {
   conSet[_conIdx].posInUnsatConIdxs = unsatConIdxs.size();
   unsatConIdxs.push_back(_conIdx);
 }
 
-void LocalConUtil::RemoveUnsat(
-    const size_t _conIdx)
-{
+void LocalConUtil::removeUnsat(size_t _conIdx) {
   assert(unsatConIdxs.size() > 0);
-  if (unsatConIdxs.size() == 1)
-  {
-    unsatConIdxs.pop_back();
-    return;
-  }
   size_t pos = conSet[_conIdx].posInUnsatConIdxs;
-  unsatConIdxs[pos] = *unsatConIdxs.rbegin();
+  if (pos != unsatConIdxs.size() - 1) {
+    unsatConIdxs[pos] = unsatConIdxs.back();
+    conSet[unsatConIdxs[pos]].posInUnsatConIdxs = pos;
+  }
   unsatConIdxs.pop_back();
-  conSet[unsatConIdxs[pos]].posInUnsatConIdxs = pos;
 }
