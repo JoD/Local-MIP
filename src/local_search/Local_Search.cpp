@@ -32,11 +32,17 @@
 
 int Local_Search::run_search(const std::vector<double>& p_start_solution)
 {
-  init_data();
-  if (solve_objective_only())
-    return 0;
-  m_start.set_up_start_values(m_start_ctx, p_start_solution);
-  init_state();
+  // The init prologue is skipped only by resume_search(), which re-enters the loop on the state a
+  // previous call left behind; every other entry initializes as before.
+  if (!m_skip_init || !m_initialized)
+  {
+    init_data();
+    if (solve_objective_only())
+      return 0;
+    m_start.set_up_start_values(m_start_ctx, p_start_solution);
+    init_state();
+    m_initialized = true;
+  }
 
   while (!m_terminated)
   {
@@ -71,6 +77,147 @@ int Local_Search::run_search(const std::vector<double>& p_start_solution)
     ++m_cur_step;
   }
   return 0;
+}
+
+void Local_Search::initialize(const std::vector<double>& p_start_solution)
+{
+  init_data();
+  m_start.set_up_start_values(m_start_ctx, p_start_solution);
+  init_state();
+  m_initialized = true;
+}
+
+void Local_Search::restart_from(const std::vector<double>& p_start_solution)
+{
+  m_start.set_up_start_values(m_start_ctx, p_start_solution);
+  init_state();
+}
+
+int Local_Search::resume_search(const std::vector<double>& p_start_solution)
+{
+  // Deliberately does NOT clear the terminate flag: this runs on the searching thread, so clearing it here
+  // would drop a terminate() that the controlling thread issued between spawning this one and its first
+  // instruction -- and the search would then never stop. Clearing it is clear_terminate()'s job, on the
+  // thread that also calls terminate().
+  //
+  // Nothing left to look for: a model without an objective asks only for a feasible assignment, and this
+  // state already has one. Entering the loop would neither improve nor terminate it (the search's own exit
+  // runs on first reaching feasibility), so it would spin until the caller stops it.
+  if (m_initialized && !m_has_objective && m_is_found_feasible && m_con_unsat_idxs.empty())
+    return 0;
+  m_skip_init = true;
+  const int result = run_search(p_start_solution);
+  m_skip_init = false;
+  return result;
+}
+
+void Local_Search::add_variable(size_t p_var_idx)
+{
+  // Must be exactly the variable just appended to the manager: it is index m_var_num here, and the
+  // manager already grew var_num (and the objective-cost vectors this object shares by reference).
+  assert(p_var_idx == m_var_num);
+  assert(m_model_manager->var_num() == p_var_idx + 1);
+  const auto& model_var = m_model_manager->var(p_var_idx);
+  assert(model_var.term_num() == 0);  // in no constraint yet, so no activity and no sat/unsat change
+  // A value inside the new column's bounds, 0 where that is feasible -- what the start heuristic would
+  // pick for a column no constraint and no objective term touches.
+  double value = 0.0;
+  if (value < model_var.lower_bound())
+    value = model_var.lower_bound();
+  if (value > model_var.upper_bound())
+    value = model_var.upper_bound();
+  // Grow every per-variable vector by one slot (in place: the contexts hold references to the vector
+  // objects, so this keeps them valid), mirroring what init_data() sized them to from the start. The
+  // stamp starts at 0, which reset_op() never uses as a live token, i.e. "not stamped this round".
+  m_var_current_value.push_back(value);
+  m_var_best_value.push_back(value);
+  m_var_allow_inc_step.push_back(0);
+  m_var_allow_dec_step.push_back(0);
+  m_var_last_inc_step.push_back(0);
+  m_var_last_dec_step.push_back(0);
+  m_binary_op_stamp.push_back(0);
+  m_var_num = p_var_idx + 1;
+}
+
+void Local_Search::add_constraint(size_t p_con_idx)
+{
+  // Must be exactly the constraint just appended to the manager: it is index m_con_num here, and the
+  // manager already grew con_num and con_is_equality (which con_unsat() reads) to include it.
+  assert(p_con_idx == m_con_num);
+  assert(m_model_manager->con_num() == p_con_idx + 1);
+  const auto& con = m_model_manager->con(p_con_idx);
+  const auto& coeffs = con.coeff_set();
+  const auto& var_idxs = con.var_idx_set();
+  long double activity = 0.0L;
+  for (size_t term_idx = 0; term_idx < coeffs.size(); ++term_idx)
+    activity += static_cast<long double>(coeffs[term_idx]) *
+                static_cast<long double>(m_var_current_value[var_idxs[term_idx]]);
+  // Grow every per-constraint vector by one slot (in place: the contexts hold references to the vector
+  // objects, so this keeps them valid), mirroring what init_data() sized them to from the start.
+  m_con_weight.push_back(1);
+  m_con_constant.push_back(con.rhs());
+  m_con_activity.push_back(static_cast<double>(activity));
+  m_con_pos_in_unsat_idxs.push_back(SIZE_MAX);
+  m_con_pos_in_sat_idxs.push_back(SIZE_MAX);
+  m_con_num = p_con_idx + 1;
+  if (con_unsat(p_con_idx))
+    insert_unsat(p_con_idx);
+  else
+    insert_sat(p_con_idx);
+  // The recorded best solution predates this constraint and may violate it, so it is no longer a
+  // feasible solution of this model: re-arm the "found feasible" state, which makes the search record a
+  // fresh best (update_best_solution) as soon as the assignment satisfies everything again. For a model
+  // without an objective that is also its termination condition, so a search resumed after an addition
+  // still ends on its own rather than looping over an assignment it has nothing left to improve.
+  m_is_found_feasible = false;
+}
+
+bool Local_Search::verify_state_consistent() const
+{
+  if (m_con_activity.size() != m_con_num || m_con_constant.size() != m_con_num ||
+      m_con_weight.size() != m_con_num ||
+      m_con_pos_in_unsat_idxs.size() != m_con_num ||
+      m_con_pos_in_sat_idxs.size() != m_con_num)
+    return false;
+  if (m_var_num != m_model_manager->var_num())
+    return false;
+  if (m_var_current_value.size() != m_var_num ||
+      m_var_best_value.size() != m_var_num ||
+      m_var_allow_inc_step.size() != m_var_num ||
+      m_var_allow_dec_step.size() != m_var_num ||
+      m_var_last_inc_step.size() != m_var_num ||
+      m_var_last_dec_step.size() != m_var_num ||
+      m_binary_op_stamp.size() != m_var_num)
+    return false;
+  for (size_t var_idx = 0; var_idx < m_var_num; ++var_idx)
+    if (!m_model_manager->var(var_idx).in_bound(m_var_current_value[var_idx]))
+      return false;
+  for (size_t con_idx = 1; con_idx < m_con_num; ++con_idx)
+  {
+    const auto& con = m_model_manager->con(con_idx);
+    const auto& coeffs = con.coeff_set();
+    const auto& var_idxs = con.var_idx_set();
+    long double activity = 0.0L;
+    for (size_t term_idx = 0; term_idx < coeffs.size(); ++term_idx)
+      activity += static_cast<long double>(coeffs[term_idx]) *
+                  static_cast<long double>(m_var_current_value[var_idxs[term_idx]]);
+    if (std::fabs(static_cast<double>(activity) - m_con_activity[con_idx]) > k_feas_tolerance)
+      return false;
+    const bool in_unsat = m_con_pos_in_unsat_idxs[con_idx] != SIZE_MAX;
+    const bool in_sat = m_con_pos_in_sat_idxs[con_idx] != SIZE_MAX;
+    if (in_unsat == in_sat)  // every real constraint is in exactly one of the two lists
+      return false;
+    if (in_unsat != con_unsat(con_idx))
+      return false;
+  }
+  // The swap-index lists point back to themselves consistently and partition cons 1..m_con_num-1.
+  for (size_t pos = 0; pos < m_con_unsat_idxs.size(); ++pos)
+    if (m_con_pos_in_unsat_idxs[m_con_unsat_idxs[pos]] != pos)
+      return false;
+  for (size_t pos = 0; pos < m_con_sat_idxs.size(); ++pos)
+    if (m_con_pos_in_sat_idxs[m_con_sat_idxs[pos]] != pos)
+      return false;
+  return m_con_unsat_idxs.size() + m_con_sat_idxs.size() == m_con_num - 1;
 }
 
 void Local_Search::output_result() const
@@ -337,7 +484,7 @@ void Local_Search::init_data()
   m_con_activity.resize(m_con_num, 0.0);
   for (size_t con_idx = 1; con_idx < m_con_num; con_idx++)
     m_con_constant[con_idx] = m_model_manager->con(con_idx).rhs();
-  auto& model_obj = m_model_manager->obj();
+  [[maybe_unused]] auto& model_obj = m_model_manager->obj();
   if (m_explore_neighbor_list.empty())
   {
     m_explore_neighbor_list = {

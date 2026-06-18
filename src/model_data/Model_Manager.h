@@ -110,6 +110,33 @@ public:
 
   bool process_after_read();
 
+  // Incremental addition of a single constraint *after* process_after_read(), bringing it to the same
+  // post-read state a from-scratch build would (normalized to '<=', classified, con_is_equality grown,
+  // con_num bumped, type-index lists updated). Variables, bounds and the objective are left untouched.
+  // p_cols/p_coeffs are the constraint's terms in column (variable index) space. Returns the new
+  // constraint index. Pair with Local_Search::add_constraint to fold it into a live search. O(nnz).
+  size_t append_constraint(const std::string& p_name,
+                           const char p_type,
+                           const double p_rhs,
+                           const std::vector<size_t>& p_cols,
+                           const std::vector<double>& p_coeffs);
+
+  // Incremental addition of a single variable *after* process_after_read(), bringing it to the same
+  // post-read state a from-scratch build would (bounds and type set, classified into the fixed / binary /
+  // general-integer / real counts and index lists, var_num bumped, the objective-cost maps grown). The
+  // new variable carries no objective term and occurs in no constraint yet; append_constraint may
+  // reference it afterwards. Returns the new variable index, or SIZE_MAX when the bounds are infeasible
+  // (lower > upper), in which case the caller should rebuild rather than search on. O(1).
+  //
+  // Unlike append_constraint there is no live-search counterpart: a Local_Search caches var_num and
+  // sizes its per-variable state during init, while binary_idx_list / non_fixed_var_idxs are shared by
+  // reference -- so a variable appended under a running search would be indexed out of that state. Append
+  // variables only while no Local_Search is running on this manager.
+  size_t append_variable(const std::string& p_name,
+                         const double p_lower_bound,
+                         const double p_upper_bound,
+                         const bool p_binary);
+
   inline const std::string& get_obj_name() const;
 
   inline const Model_Var& var(const size_t p_idx) const;

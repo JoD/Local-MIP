@@ -69,10 +69,10 @@ size_t Model_Manager::make_con(const std::string& p_name,
 bool Model_Manager::process_after_read()
 {
   m_var_num = m_var_list.size();
-  const size_t original_con_num = m_con_list.size();
-  printf("c original problem has %zu variables and %zu constraints\n",
-         m_var_num,
-         original_con_num - 1);
+  // const size_t original_con_num = m_con_list.size();
+  // printf("c original problem has %zu variables and %zu constraints\n",
+  //        m_var_num,
+  //        original_con_num - 1);
   if (m_split_eq)
     convert_eq_to_ineq();
   m_con_num = m_con_list.size();
@@ -140,6 +140,81 @@ bool Model_Manager::process_after_read()
   return true;
 }
 
+size_t Model_Manager::append_constraint(const std::string& p_name,
+                                        const char p_type,
+                                        const double p_rhs,
+                                        const std::vector<size_t>& p_cols,
+                                        const std::vector<double>& p_coeffs)
+{
+  assert(p_cols.size() == p_coeffs.size());
+  // Build the row + the row/column adjacency exactly as build/read does for the initial constraints.
+  const size_t con_idx = make_con(p_name, p_type);
+  Model_Con& con = m_con_list[con_idx];
+  con.set_rhs(p_rhs);
+  for (size_t j = 0; j < p_cols.size(); ++j)
+  {
+    Model_Var& mv = m_var_list[p_cols[j]];
+    mv.add_con(con_idx, con.term_num());
+    con.add_var(p_cols[j], p_coeffs[j], mv.term_num() - 1);
+  }
+  // Same per-constraint post-processing process_after_read() applies (variables are already calculated,
+  // so their types are known; bound tightening / objective handling are model-global and untouched).
+  if (con.is_greater())
+    con.convert_greater_to_less();
+  classify_con(con);
+  for (Con_Type type : con.get_types())
+  {
+    m_type_to_con_idx_list[type].push_back(con_idx);
+    m_type_to_con_idx_set[type].insert(con_idx);
+  }
+  m_con_is_equality.push_back(con.is_equality());
+  m_con_num = m_con_list.size();
+  assert(m_con_is_equality.size() == m_con_num);
+  return con_idx;
+}
+
+size_t Model_Manager::append_variable(const std::string& p_name,
+                                      const double p_lower_bound,
+                                      const double p_upper_bound,
+                                      const bool p_binary)
+{
+  assert(!exists_var(p_name));  // make_var would hand back the existing column instead of a new one
+  const size_t var_idx = make_var(p_name, /*integrality=*/true);
+  Model_Var& model_var = m_var_list[var_idx];
+  model_var.set_lower_bound(p_lower_bound);
+  model_var.set_upper_bound(p_upper_bound);
+  model_var.set_type(p_binary ? Var_Type::binary : Var_Type::general_integer);
+  if (model_var.lower_bound() > model_var.upper_bound() + k_feas_tolerance)
+    return SIZE_MAX;
+  // The per-variable half of calculate_vars(), for this one variable.
+  if (model_var.is_fixed())
+  {
+    m_fixed_num++;
+    model_var.set_type(Var_Type::fixed);
+  }
+  else if (model_var.is_binary())
+  {
+    m_binary_num++;
+    model_var.set_type(Var_Type::binary);
+    m_binary_idx_list.push_back(var_idx);
+  }
+  else if (model_var.type() == Var_Type::general_integer)
+    m_general_integer_num++;
+  else
+  {
+    model_var.set_type(Var_Type::real);
+    m_real_num++;
+  }
+  if (!model_var.is_fixed())
+    m_non_fixed_var_idxs.push_back(var_idx);
+  m_var_num = m_var_list.size();
+  // Grown as process_after_read() sizes them; the new column has no objective term (SIZE_MAX / 0 cost).
+  m_var_idx_to_obj_idx.resize(m_var_num, SIZE_MAX);
+  m_var_obj_cost.resize(m_var_num, 0.0);
+  assert(m_var_idx_to_obj_idx.size() == m_var_num);
+  return var_idx;
+}
+
 bool Model_Manager::calculate_vars()
 {
   m_general_integer_num = 0;
@@ -183,11 +258,11 @@ bool Model_Manager::calculate_vars()
     if (!model_var.is_fixed())
       m_non_fixed_var_idxs.push_back(var_idx);
   }
-  printf("c fixed: %zu, binary: %zu, general integer: %zu, real: %zu\n",
-         m_fixed_num,
-         m_binary_num,
-         m_general_integer_num,
-         m_real_num);
+  // printf("c fixed: %zu, binary: %zu, general integer: %zu, real: %zu\n",
+  //        m_fixed_num,
+  //        m_binary_num,
+  //        m_general_integer_num,
+  //        m_real_num);
   return true;
 }
 
@@ -428,9 +503,9 @@ void Model_Manager::convert_eq_to_ineq()
     con.convert_equality_to_less();
     append_negated_con(con);
   }
-  printf(
-      "c converted %zu equality constraints to inequality constraints\n",
-      equality_count);
+  // printf(
+  //     "c converted %zu equality constraints to inequality constraints\n",
+  //     equality_count);
 }
 
 void Model_Manager::append_negated_con(const Model_Con& p_source)
@@ -515,40 +590,40 @@ void Model_Manager::print_cons_type_summary() const
     column_widths[idx + 1] =
         std::max(type_names.back().size(), count_values.back().size());
   }
-  auto print_border = [&column_widths]()
-  {
-    printf("c ");
-    for (size_t idx = 0; idx < column_widths.size(); ++idx)
-    {
-      printf("+");
-      for (size_t dash = 0; dash < column_widths[idx] + 2; ++dash)
-        printf("-");
-    }
-    printf("+\n");
-  };
-  print_border();
-  printf("c | %-*s ",
-         static_cast<int>(column_widths[0]),
-         header_label.c_str());
-  for (size_t idx = 0; idx < type_names.size(); ++idx)
-  {
-    printf("| %-*s ",
-           static_cast<int>(column_widths[idx + 1]),
-           type_names[idx].c_str());
-  }
-  printf("|\n");
-  print_border();
-  printf("c | %-*s ",
-         static_cast<int>(column_widths[0]),
-         count_label.c_str());
-  for (size_t idx = 0; idx < count_values.size(); ++idx)
-  {
-    printf("| %-*s ",
-           static_cast<int>(column_widths[idx + 1]),
-           count_values[idx].c_str());
-  }
-  printf("|\n");
-  print_border();
+  // auto print_border = [&column_widths]()
+  // {
+  //   printf("c ");
+  //   for (size_t idx = 0; idx < column_widths.size(); ++idx)
+  //   {
+  //     printf("+");
+  //     for (size_t dash = 0; dash < column_widths[idx] + 2; ++dash)
+  //       printf("-");
+  //   }
+  //   printf("+\n");
+  // };
+  // print_border();
+  // printf("c | %-*s ",
+  //        static_cast<int>(column_widths[0]),
+  //        header_label.c_str());
+  // for (size_t idx = 0; idx < type_names.size(); ++idx)
+  // {
+  //   printf("| %-*s ",
+  //          static_cast<int>(column_widths[idx + 1]),
+  //          type_names[idx].c_str());
+  // }
+  // printf("|\n");
+  // print_border();
+  // printf("c | %-*s ",
+  //        static_cast<int>(column_widths[0]),
+  //        count_label.c_str());
+  // for (size_t idx = 0; idx < count_values.size(); ++idx)
+  // {
+  //   printf("| %-*s ",
+  //          static_cast<int>(column_widths[idx + 1]),
+  //          count_values[idx].c_str());
+  // }
+  // printf("|\n");
+  // print_border();
 }
 
 void Model_Manager::classify_con(Model_Con& p_con)
