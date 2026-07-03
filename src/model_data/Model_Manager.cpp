@@ -140,6 +140,39 @@ bool Model_Manager::process_after_read()
   return true;
 }
 
+size_t Model_Manager::append_constraint(const std::string& p_name,
+                                        const char p_type,
+                                        const double p_rhs,
+                                        const std::vector<size_t>& p_cols,
+                                        const std::vector<double>& p_coeffs)
+{
+  assert(p_cols.size() == p_coeffs.size());
+  // Build the row + the row/column adjacency exactly as build/read does for the initial constraints.
+  const size_t con_idx = make_con(p_name, p_type);
+  Model_Con& con = m_con_list[con_idx];
+  con.set_rhs(p_rhs);
+  for (size_t j = 0; j < p_cols.size(); ++j)
+  {
+    Model_Var& mv = m_var_list[p_cols[j]];
+    mv.add_con(con_idx, con.term_num());
+    con.add_var(p_cols[j], p_coeffs[j], mv.term_num() - 1);
+  }
+  // Same per-constraint post-processing process_after_read() applies (variables are already calculated,
+  // so their types are known; bound tightening / objective handling are model-global and untouched).
+  if (con.is_greater())
+    con.convert_greater_to_less();
+  classify_con(con);
+  for (Con_Type type : con.get_types())
+  {
+    m_type_to_con_idx_list[type].push_back(con_idx);
+    m_type_to_con_idx_set[type].insert(con_idx);
+  }
+  m_con_is_equality.push_back(con.is_equality());
+  m_con_num = m_con_list.size();
+  assert(m_con_is_equality.size() == m_con_num);
+  return con_idx;
+}
+
 bool Model_Manager::calculate_vars()
 {
   m_general_integer_num = 0;

@@ -73,6 +73,75 @@ int Local_Search::run_search(const std::vector<double>& p_start_solution)
   return 0;
 }
 
+void Local_Search::initialize(const std::vector<double>& p_start_solution)
+{
+  init_data();
+  m_start.set_up_start_values(m_start_ctx, p_start_solution);
+  init_state();
+}
+
+void Local_Search::add_constraint(size_t p_con_idx)
+{
+  // Must be exactly the constraint just appended to the manager: it is index m_con_num here, and the
+  // manager already grew con_num and con_is_equality (which con_unsat() reads) to include it.
+  assert(p_con_idx == m_con_num);
+  assert(m_model_manager->con_num() == p_con_idx + 1);
+  const auto& con = m_model_manager->con(p_con_idx);
+  const auto& coeffs = con.coeff_set();
+  const auto& var_idxs = con.var_idx_set();
+  long double activity = 0.0L;
+  for (size_t term_idx = 0; term_idx < coeffs.size(); ++term_idx)
+    activity += static_cast<long double>(coeffs[term_idx]) *
+                static_cast<long double>(m_var_current_value[var_idxs[term_idx]]);
+  // Grow every per-constraint vector by one slot (in place: the contexts hold references to the vector
+  // objects, so this keeps them valid), mirroring what init_data() sized them to from the start.
+  m_con_weight.push_back(1);
+  m_con_constant.push_back(con.rhs());
+  m_con_activity.push_back(static_cast<double>(activity));
+  m_con_pos_in_unsat_idxs.push_back(SIZE_MAX);
+  m_con_pos_in_sat_idxs.push_back(SIZE_MAX);
+  m_con_num = p_con_idx + 1;
+  if (con_unsat(p_con_idx))
+    insert_unsat(p_con_idx);
+  else
+    insert_sat(p_con_idx);
+}
+
+bool Local_Search::verify_state_consistent() const
+{
+  if (m_con_activity.size() != m_con_num || m_con_constant.size() != m_con_num ||
+      m_con_weight.size() != m_con_num ||
+      m_con_pos_in_unsat_idxs.size() != m_con_num ||
+      m_con_pos_in_sat_idxs.size() != m_con_num)
+    return false;
+  for (size_t con_idx = 1; con_idx < m_con_num; ++con_idx)
+  {
+    const auto& con = m_model_manager->con(con_idx);
+    const auto& coeffs = con.coeff_set();
+    const auto& var_idxs = con.var_idx_set();
+    long double activity = 0.0L;
+    for (size_t term_idx = 0; term_idx < coeffs.size(); ++term_idx)
+      activity += static_cast<long double>(coeffs[term_idx]) *
+                  static_cast<long double>(m_var_current_value[var_idxs[term_idx]]);
+    if (std::fabs(static_cast<double>(activity) - m_con_activity[con_idx]) > k_feas_tolerance)
+      return false;
+    const bool in_unsat = m_con_pos_in_unsat_idxs[con_idx] != SIZE_MAX;
+    const bool in_sat = m_con_pos_in_sat_idxs[con_idx] != SIZE_MAX;
+    if (in_unsat == in_sat)  // every real constraint is in exactly one of the two lists
+      return false;
+    if (in_unsat != con_unsat(con_idx))
+      return false;
+  }
+  // The swap-index lists point back to themselves consistently and partition cons 1..m_con_num-1.
+  for (size_t pos = 0; pos < m_con_unsat_idxs.size(); ++pos)
+    if (m_con_pos_in_unsat_idxs[m_con_unsat_idxs[pos]] != pos)
+      return false;
+  for (size_t pos = 0; pos < m_con_sat_idxs.size(); ++pos)
+    if (m_con_pos_in_sat_idxs[m_con_sat_idxs[pos]] != pos)
+      return false;
+  return m_con_unsat_idxs.size() + m_con_sat_idxs.size() == m_con_num - 1;
+}
+
 void Local_Search::output_result() const
 {
   if (m_is_unbounded)

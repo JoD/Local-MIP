@@ -246,6 +246,24 @@ public:
 
   int run_search(const std::vector<double>& p_start_solution = {});
 
+  // Fold a constraint appended to the Model_Manager (via Model_Manager::append_constraint) into the
+  // current search state: grow the per-constraint vectors, compute its activity under the current
+  // assignment, and insert it into the sat/unsat index structures. O(nnz of the constraint); no full
+  // re-init. The constraint must be the one just appended (index == current con_count()).
+  void add_constraint(size_t p_con_idx);
+
+  // Run the init prologue (init_data + start values + activities) without entering the search loop, so
+  // the search state can be set up and inspected directly (used by the incremental-maintenance tests).
+  void initialize(const std::vector<double>& p_start_solution = {});
+
+  // Recompute every constraint's activity from the current assignment and check it against the cached
+  // value and the sat/unsat index structures; returns false on any inconsistency. Test/debug helper.
+  bool verify_state_consistent() const;
+
+  size_t con_count() const { return m_con_num; }
+  size_t unsat_count() const { return m_con_unsat_idxs.size(); }
+  double con_activity(size_t p_con_idx) const { return m_con_activity[p_con_idx]; }
+
   void output_result() const;
 
   void write_sol() const;

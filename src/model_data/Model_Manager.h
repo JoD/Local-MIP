@@ -110,6 +110,17 @@ public:
 
   bool process_after_read();
 
+  // Incremental addition of a single constraint *after* process_after_read(), bringing it to the same
+  // post-read state a from-scratch build would (normalized to '<=', classified, con_is_equality grown,
+  // con_num bumped, type-index lists updated). Variables, bounds and the objective are left untouched.
+  // p_cols/p_coeffs are the constraint's terms in column (variable index) space. Returns the new
+  // constraint index. Pair with Local_Search::add_constraint to fold it into a live search. O(nnz).
+  size_t append_constraint(const std::string& p_name,
+                           const char p_type,
+                           const double p_rhs,
+                           const std::vector<size_t>& p_cols,
+                           const std::vector<double>& p_coeffs);
+
   inline const std::string& get_obj_name() const;
 
   inline const Model_Var& var(const size_t p_idx) const;
