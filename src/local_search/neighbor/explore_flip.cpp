@@ -27,7 +27,7 @@ void Neighbor::explore_flip(Neighbor_Ctx& p_ctx)
   for (size_t idx = 0; idx < neighbor_size; ++idx)
   {
     size_t var_idx = neighbor_idxs[idx];
-    auto& model_var = p_ctx.m_shared.m_model_manager.var(var_idx);
+    [[maybe_unused]] auto& model_var = p_ctx.m_shared.m_model_manager.var(var_idx);
     assert(model_var.is_binary());
     double delta = 0;
     if (p_ctx.m_shared.m_var_current_value[var_idx] > 0.5)
