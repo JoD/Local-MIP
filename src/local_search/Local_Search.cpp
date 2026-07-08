@@ -406,7 +406,7 @@ void Local_Search::init_data()
   m_con_activity.resize(m_con_num, 0.0);
   for (size_t con_idx = 1; con_idx < m_con_num; con_idx++)
     m_con_constant[con_idx] = m_model_manager->con(con_idx).rhs();
-  auto& model_obj = m_model_manager->obj();
+  [[maybe_unused]] auto& model_obj = m_model_manager->obj();
   if (m_explore_neighbor_list.empty())
   {
     m_explore_neighbor_list = {
