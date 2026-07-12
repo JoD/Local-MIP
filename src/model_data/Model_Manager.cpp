@@ -69,10 +69,10 @@ size_t Model_Manager::make_con(const std::string& p_name,
 bool Model_Manager::process_after_read()
 {
   m_var_num = m_var_list.size();
-  const size_t original_con_num = m_con_list.size();
-  printf("c original problem has %zu variables and %zu constraints\n",
-         m_var_num,
-         original_con_num - 1);
+  // const size_t original_con_num = m_con_list.size();
+  // printf("c original problem has %zu variables and %zu constraints\n",
+  //        m_var_num,
+  //        original_con_num - 1);
   if (m_split_eq)
     convert_eq_to_ineq();
   m_con_num = m_con_list.size();
@@ -216,11 +216,11 @@ bool Model_Manager::calculate_vars()
     if (!model_var.is_fixed())
       m_non_fixed_var_idxs.push_back(var_idx);
   }
-  printf("c fixed: %zu, binary: %zu, general integer: %zu, real: %zu\n",
-         m_fixed_num,
-         m_binary_num,
-         m_general_integer_num,
-         m_real_num);
+  // printf("c fixed: %zu, binary: %zu, general integer: %zu, real: %zu\n",
+  //        m_fixed_num,
+  //        m_binary_num,
+  //        m_general_integer_num,
+  //        m_real_num);
   return true;
 }
 
@@ -548,40 +548,40 @@ void Model_Manager::print_cons_type_summary() const
     column_widths[idx + 1] =
         std::max(type_names.back().size(), count_values.back().size());
   }
-  auto print_border = [&column_widths]()
-  {
-    printf("c ");
-    for (size_t idx = 0; idx < column_widths.size(); ++idx)
-    {
-      printf("+");
-      for (size_t dash = 0; dash < column_widths[idx] + 2; ++dash)
-        printf("-");
-    }
-    printf("+\n");
-  };
-  print_border();
-  printf("c | %-*s ",
-         static_cast<int>(column_widths[0]),
-         header_label.c_str());
-  for (size_t idx = 0; idx < type_names.size(); ++idx)
-  {
-    printf("| %-*s ",
-           static_cast<int>(column_widths[idx + 1]),
-           type_names[idx].c_str());
-  }
-  printf("|\n");
-  print_border();
-  printf("c | %-*s ",
-         static_cast<int>(column_widths[0]),
-         count_label.c_str());
-  for (size_t idx = 0; idx < count_values.size(); ++idx)
-  {
-    printf("| %-*s ",
-           static_cast<int>(column_widths[idx + 1]),
-           count_values[idx].c_str());
-  }
-  printf("|\n");
-  print_border();
+  // auto print_border = [&column_widths]()
+  // {
+  //   printf("c ");
+  //   for (size_t idx = 0; idx < column_widths.size(); ++idx)
+  //   {
+  //     printf("+");
+  //     for (size_t dash = 0; dash < column_widths[idx] + 2; ++dash)
+  //       printf("-");
+  //   }
+  //   printf("+\n");
+  // };
+  // print_border();
+  // printf("c | %-*s ",
+  //        static_cast<int>(column_widths[0]),
+  //        header_label.c_str());
+  // for (size_t idx = 0; idx < type_names.size(); ++idx)
+  // {
+  //   printf("| %-*s ",
+  //          static_cast<int>(column_widths[idx + 1]),
+  //          type_names[idx].c_str());
+  // }
+  // printf("|\n");
+  // print_border();
+  // printf("c | %-*s ",
+  //        static_cast<int>(column_widths[0]),
+  //        count_label.c_str());
+  // for (size_t idx = 0; idx < count_values.size(); ++idx)
+  // {
+  //   printf("| %-*s ",
+  //          static_cast<int>(column_widths[idx + 1]),
+  //          count_values[idx].c_str());
+  // }
+  // printf("|\n");
+  // print_border();
 }
 
 void Model_Manager::classify_con(Model_Con& p_con)
