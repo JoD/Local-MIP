@@ -461,9 +461,9 @@ void Model_Manager::convert_eq_to_ineq()
     con.convert_equality_to_less();
     append_negated_con(con);
   }
-  printf(
-      "c converted %zu equality constraints to inequality constraints\n",
-      equality_count);
+  // printf(
+  //     "c converted %zu equality constraints to inequality constraints\n",
+  //     equality_count);
 }
 
 void Model_Manager::append_negated_con(const Model_Con& p_source)
