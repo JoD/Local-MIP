@@ -173,6 +173,48 @@ size_t Model_Manager::append_constraint(const std::string& p_name,
   return con_idx;
 }
 
+size_t Model_Manager::append_variable(const std::string& p_name,
+                                      const double p_lower_bound,
+                                      const double p_upper_bound,
+                                      const bool p_binary)
+{
+  assert(!exists_var(p_name));  // make_var would hand back the existing column instead of a new one
+  const size_t var_idx = make_var(p_name, /*integrality=*/true);
+  Model_Var& model_var = m_var_list[var_idx];
+  model_var.set_lower_bound(p_lower_bound);
+  model_var.set_upper_bound(p_upper_bound);
+  model_var.set_type(p_binary ? Var_Type::binary : Var_Type::general_integer);
+  if (model_var.lower_bound() > model_var.upper_bound() + k_feas_tolerance)
+    return SIZE_MAX;
+  // The per-variable half of calculate_vars(), for this one variable.
+  if (model_var.is_fixed())
+  {
+    m_fixed_num++;
+    model_var.set_type(Var_Type::fixed);
+  }
+  else if (model_var.is_binary())
+  {
+    m_binary_num++;
+    model_var.set_type(Var_Type::binary);
+    m_binary_idx_list.push_back(var_idx);
+  }
+  else if (model_var.type() == Var_Type::general_integer)
+    m_general_integer_num++;
+  else
+  {
+    model_var.set_type(Var_Type::real);
+    m_real_num++;
+  }
+  if (!model_var.is_fixed())
+    m_non_fixed_var_idxs.push_back(var_idx);
+  m_var_num = m_var_list.size();
+  // Grown as process_after_read() sizes them; the new column has no objective term (SIZE_MAX / 0 cost).
+  m_var_idx_to_obj_idx.resize(m_var_num, SIZE_MAX);
+  m_var_obj_cost.resize(m_var_num, 0.0);
+  assert(m_var_idx_to_obj_idx.size() == m_var_num);
+  return var_idx;
+}
+
 bool Model_Manager::calculate_vars()
 {
   m_general_integer_num = 0;

@@ -133,7 +133,16 @@ private:
 
   std::atomic<double> m_logged_obj_value;
 
-  bool m_terminated;
+  // Atomic because terminate() is called from another thread than the one inside run_search: with a plain
+  // bool the loop's exit test can be hoisted out of a spell of iterations that touch nothing else, and the
+  // search then never stops.
+  std::atomic<bool> m_terminated;
+
+  // Search-state lifetime, for resume_search(): whether the init prologue has run on this object, and
+  // whether the next run_search() should skip it. In-class initializers, so the constructor is untouched.
+  bool m_initialized = false;
+
+  bool m_skip_init = false;
 
   std::string m_sol_path;
 
@@ -246,11 +255,36 @@ public:
 
   int run_search(const std::vector<double>& p_start_solution = {});
 
+  // Re-enter the search loop on the state a previous run_search() / resume_search() left behind, without
+  // re-initializing it: the assignment, the constraint weights, the tabu ages, the step counters and the
+  // best solution found are all kept. A search that is stopped and restarted (Exact pauses it between
+  // solve calls) therefore accumulates progress instead of starting over, and entry is O(1) rather than
+  // O(model). Falls back to a full initialization -- from p_start_solution, as run_search would -- when
+  // this object has no initialized state yet.
+  // PRE: clear_terminate() was called since the last terminate(), from the controlling thread.
+  int resume_search(const std::vector<double>& p_start_solution = {});
+
+  // Re-arm the terminate flag for a following run_search()/resume_search(). Call it from the thread that
+  // calls terminate(), before handing the search to its own thread: clearing the flag on the searching
+  // thread instead would race -- and lose -- a terminate() issued before that thread got going.
+  void clear_terminate() { m_terminated = false; }
+
   // Fold a constraint appended to the Model_Manager (via Model_Manager::append_constraint) into the
   // current search state: grow the per-constraint vectors, compute its activity under the current
   // assignment, and insert it into the sat/unsat index structures. O(nnz of the constraint); no full
   // re-init. The constraint must be the one just appended (index == current con_count()).
   void add_constraint(size_t p_con_idx);
+
+  // The same for a variable appended to the Model_Manager (via Model_Manager::append_variable): grow the
+  // per-variable vectors and seed the new column with a value inside its bounds. It occurs in no
+  // constraint and carries no objective term (append_variable's contract), so no activity changes and the
+  // search may keep running. O(1). The variable must be the one just appended (index == var_count()).
+  void add_variable(size_t p_var_idx);
+
+  // Re-seed the current assignment from p_start_solution and recompute the activities -- the same work
+  // the search does at its own restarts (reset_after_restart) -- while keeping the constraint weights and
+  // the best solution found. For handing a live search a solution found elsewhere. O(nnz).
+  void restart_from(const std::vector<double>& p_start_solution);
 
   // Run the init prologue (init_data + start values + activities) without entering the search loop, so
   // the search state can be set up and inspected directly (used by the incremental-maintenance tests).
@@ -261,6 +295,8 @@ public:
   bool verify_state_consistent() const;
 
   size_t con_count() const { return m_con_num; }
+  size_t var_count() const { return m_var_num; }
+  bool is_initialized() const { return m_initialized; }
   size_t unsat_count() const { return m_con_unsat_idxs.size(); }
   double con_activity(size_t p_con_idx) const { return m_con_activity[p_con_idx]; }
 
