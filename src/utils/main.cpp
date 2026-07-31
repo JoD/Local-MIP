@@ -26,18 +26,28 @@
 
 std::atomic<Local_MIP*> g_solver{nullptr};
 
+static_assert(std::atomic<Local_MIP*>::is_always_lock_free,
+              "signal handling requires lock-free pointer atomics");
+static_assert(std::atomic<bool>::is_always_lock_free,
+              "signal handling requires lock-free boolean atomics");
+
 void signal_handler(int p_signal)
 {
+  (void)p_signal;
   Local_MIP* solver = g_solver.load(std::memory_order_acquire);
   if (solver != nullptr)
-    solver->terminate();
+    solver->request_termination();
 }
 
 int main(int argc, char* argv[])
 {
+  std::setvbuf(stdout, nullptr, _IOLBF, 0);
+  std::setvbuf(stderr, nullptr, _IONBF, 0);
+
   INIT_ARGS;
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
+  std::unique_ptr<Local_MIP> solver;
   try
   {
     std::string model_file = OPT(model_file);
@@ -69,7 +79,7 @@ int main(int argc, char* argv[])
     int activity_period = OPT(activity_period);
     int break_eq_feas = OPT(break_eq_feas);
     int split_eq = OPT(split_eq);
-    std::unique_ptr<Local_MIP> solver = std::make_unique<Local_MIP>();
+    solver = std::make_unique<Local_MIP>();
     g_solver.store(solver.get(), std::memory_order_release);
     solver->set_model_file(model_file);
     if (time_limit != 10.0)
@@ -100,7 +110,7 @@ int main(int argc, char* argv[])
       solver->set_restart_step(restart_step);
     if (smooth_prob != 1)
       solver->set_weight_smooth_probability(smooth_prob);
-    if (bms_unsat_con != 12)
+    if (bms_unsat_con != 10)
       solver->set_bms_unsat_con(static_cast<size_t>(bms_unsat_con));
     if (bms_unsat_ops != 2250)
       solver->set_bms_mtm_unsat_op(static_cast<size_t>(bms_unsat_ops));

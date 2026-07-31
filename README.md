@@ -8,7 +8,7 @@ Note: Keep this README as the top-level entry point. Link to focused sub-READMEs
 
 Find out more about Local-MIP at [https://local-mip.github.io/](https://local-mip.github.io/).
 
-Although Local-MIP is freely available under the MIT license, we would be pleased to learn about users’ experiences and offer advice via email at [peng.lin.csor@gmail.com](mailto:peng.lin.csor@gmail.com).
+Although Local-MIP is freely available under the MIT license, we would be pleased to learn about users’ experiences and offer advice.
 
 ## Version History
 
@@ -92,6 +92,10 @@ Format rules:
 - Lines starting with `#` or `;` are comments
 - Command line arguments override values from the configuration file
 - See `default.set` for descriptions and valid ranges
+
+### Warm-start domain validation
+
+Warm-start `.sol` files may omit variables. Omitted variables use the solver's zero-start strategy: zero when it is inside the variable bounds, otherwise the nearest bound. Values within `feas_tolerance` of an integer or a variable bound are canonicalized; clearly fractional integer values, non-finite values, and values outside the bounds are rejected. A warm start may violate linear constraints because the local search is responsible for repairing them. Start/restart callbacks and custom moves use the same variable-domain checks.
 
 ### Tests
 CTest targets are defined in `tests/CMakeLists.txt`.

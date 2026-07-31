@@ -14,6 +14,7 @@
 #include "../model_data/Model_Con.h"
 #include "../model_data/Model_Var.h"
 #include "../utils/global_defs.h"
+#include "../utils/solver_error.h"
 #include "Local_Search.h"
 #include "neighbor/neighbor.h"
 #include "restart/restart.h"
@@ -26,11 +27,13 @@
 #include <cstdio>
 #include <limits>
 #include <random>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
-int Local_Search::run_search(const std::vector<double>& p_start_solution)
+int Local_Search::run_search(const std::vector<double>& p_start_solution,
+                             const std::vector<char>& p_start_mask)
 {
   // The init prologue is skipped only by resume_search(), which re-enters the loop on the state a
   // previous call left behind; every other entry initializes as before.
@@ -39,15 +42,20 @@ int Local_Search::run_search(const std::vector<double>& p_start_solution)
     init_data();
     if (solve_objective_only())
       return 0;
-    m_start.set_up_start_values(m_start_ctx, p_start_solution);
+    m_start.set_up_start_values(m_start_ctx, p_start_solution, p_start_mask);
+    normalize_domain_values(m_var_current_value, "initial solution");
     init_state();
     m_initialized = true;
   }
 
-  while (!m_terminated)
+  while (!m_terminated.load(std::memory_order_relaxed))
   {
     if (m_restart.execute(m_restart_ctx))
+    {
+      if (m_restart.has_user_callback())
+        normalize_domain_values(m_var_current_value, "restart solution");
       reset_after_restart();
+    }
     if (m_con_unsat_idxs.empty())
     {
       if (m_activity_hits > 0)
@@ -71,8 +79,13 @@ int Local_Search::run_search(const std::vector<double>& p_start_solution)
       if (lift_move_successful)
         continue;
     }
-    explore_neighbor(m_explore_neighbor_list);
-    apply_move(m_best_var_idx, m_best_delta);
+    const bool validate_selected_move =
+        explore_neighbor(m_explore_neighbor_list);
+    if (validate_selected_move)
+      apply_checked_move(
+          m_best_var_idx, m_best_delta, "selected neighbor move");
+    else
+      apply_move(m_best_var_idx, m_best_delta);
     m_is_keep_feas = false;
     ++m_cur_step;
   }
@@ -83,6 +96,10 @@ void Local_Search::initialize(const std::vector<double>& p_start_solution)
 {
   init_data();
   m_start.set_up_start_values(m_start_ctx, p_start_solution);
+  // Same domain check run_search does on its start values: this is the other way into a fresh search
+  // state, so a start solution that violates a bound must be caught here too rather than becoming a
+  // silently out-of-domain assignment.
+  normalize_domain_values(m_var_current_value, "initial solution");
   init_state();
   m_initialized = true;
 }
@@ -90,6 +107,7 @@ void Local_Search::initialize(const std::vector<double>& p_start_solution)
 void Local_Search::restart_from(const std::vector<double>& p_start_solution)
 {
   m_start.set_up_start_values(m_start_ctx, p_start_solution);
+  normalize_domain_values(m_var_current_value, "restart solution");
   init_state();
 }
 
@@ -105,10 +123,15 @@ int Local_Search::resume_search(const std::vector<double>& p_start_solution)
   // runs on first reaching feasibility), so it would spin until the caller stops it.
   if (m_initialized && !m_has_objective && m_is_found_feasible && m_con_unsat_idxs.empty())
     return 0;
+  // Restored on the way out whatever happens: since 2.0.7 the init prologue validates domains and throws
+  // Solver_Error, and a leaked m_skip_init would make the *next* entry skip an initialization it needs.
+  struct Skip_Init_Guard
+  {
+    bool& flag;
+    ~Skip_Init_Guard() { flag = false; }
+  } guard{m_skip_init};
   m_skip_init = true;
-  const int result = run_search(p_start_solution);
-  m_skip_init = false;
-  return result;
+  return run_search(p_start_solution);
 }
 
 void Local_Search::add_variable(size_t p_var_idx)
@@ -120,12 +143,27 @@ void Local_Search::add_variable(size_t p_var_idx)
   const auto& model_var = m_model_manager->var(p_var_idx);
   assert(model_var.term_num() == 0);  // in no constraint yet, so no activity and no sat/unsat change
   // A value inside the new column's bounds, 0 where that is feasible -- what the start heuristic would
-  // pick for a column no constraint and no objective term touches.
+  // pick for a column no constraint and no objective term touches. Clamping alone is not enough since
+  // 2.0.7: every assignment the search holds must also satisfy the variable's integrality, which is what
+  // verify_domain_values() (through verify_solution / finalize_result) now checks. try_normalize_value
+  // applies the same rounding-and-clamping rule the rest of the solver validates against, so a column
+  // seeded here can never be the reason a later finalize_result() rejects the solution.
+  // Not std::clamp: its precondition is lower <= upper, and an inverted domain is one of the states
+  // try_normalize_value() exists to reject -- so clamp the two bounds separately and let it judge.
   double value = 0.0;
   if (value < model_var.lower_bound())
     value = model_var.lower_bound();
   if (value > model_var.upper_bound())
     value = model_var.upper_bound();
+  if (!model_var.try_normalize_value(value))
+  {
+    std::ostringstream oss;
+    oss << "appended variable has no value inside its domain: '" << model_var.name()
+        << "': bounds=[" << model_var.lower_bound() << ", " << model_var.upper_bound() << "]";
+    if (model_var.requires_integrality())
+      oss << ", integer variable";
+    throw Solver_Error(oss.str());
+  }
   // Grow every per-variable vector by one slot (in place: the contexts hold references to the vector
   // objects, so this keeps them valid), mirroring what init_data() sized them to from the start. The
   // stamp starts at 0, which reset_op() never uses as a live token, i.e. "not stamped this round".
@@ -189,9 +227,11 @@ bool Local_Search::verify_state_consistent() const
       m_var_last_dec_step.size() != m_var_num ||
       m_binary_op_stamp.size() != m_var_num)
     return false;
-  for (size_t var_idx = 0; var_idx < m_var_num; ++var_idx)
-    if (!m_model_manager->var(var_idx).in_bound(m_var_current_value[var_idx]))
-      return false;
+  // The same domain rule verify_solution() applies to the best solution, applied here to the live
+  // assignment: bounds, finiteness and integrality. Checking only in_bound() would let an incremental
+  // step leave a fractional value on an integer column that the final verify_solution() then rejects.
+  if (!verify_domain_values(m_var_current_value))
+    return false;
   for (size_t con_idx = 1; con_idx < m_con_num; ++con_idx)
   {
     const auto& con = m_model_manager->con(con_idx);
@@ -220,6 +260,16 @@ bool Local_Search::verify_state_consistent() const
   return m_con_unsat_idxs.size() + m_con_sat_idxs.size() == m_con_num - 1;
 }
 
+bool Local_Search::finalize_result()
+{
+  if (m_is_unbounded || !m_is_found_feasible || verify_solution())
+    return true;
+  m_is_found_feasible = false;
+  m_logged_obj_value.store(std::numeric_limits<double>::quiet_NaN(),
+                           std::memory_order_relaxed);
+  return false;
+}
+
 void Local_Search::output_result() const
 {
   if (m_is_unbounded)
@@ -233,14 +283,12 @@ void Local_Search::output_result() const
     printf("o no feasible solution found.\n");
     printf("c min unsat constraints: %zu\n", m_min_unsat_con);
   }
-  else if (verify_solution())
+  else
   {
     printf("o best objective: %.15g\n", get_obj_value());
     if (m_sol_path != "")
       write_sol();
   }
-  else
-    printf("o solution verify failed.\n");
 }
 
 void Local_Search::refresh_activities()
@@ -284,6 +332,7 @@ void Local_Search::refresh_activities()
       insert_sat(con_idx);
   }
   m_activity_hits = 0;
+  m_current_obj_breakthrough = m_con_activity[0] <= m_con_constant[0];
 }
 
 void Local_Search::init_state()
@@ -368,19 +417,53 @@ void Local_Search::apply_move(size_t p_var_idx, double p_delta)
   assert(model_var.in_bound(m_var_current_value[p_var_idx]));
 }
 
+double Local_Search::checked_move_value(size_t p_var_idx,
+                                        double p_delta,
+                                        const char* p_source) const
+{
+  if (p_var_idx >= m_var_num)
+    throw Solver_Error(
+        std::string(p_source) +
+        " variable index is out of range: " + std::to_string(p_var_idx));
+  const auto& model_var = m_model_manager->var(p_var_idx);
+  if (!std::isfinite(p_delta))
+    throw Solver_Error(std::string(p_source) +
+                       " delta is not finite for variable '" +
+                       model_var.name() + "'");
+  const double old_value = m_var_current_value[p_var_idx];
+  const double candidate_value = old_value + p_delta;
+  if (!std::isfinite(candidate_value))
+    throw Solver_Error(std::string(p_source) +
+                       " result is not finite for variable '" +
+                       model_var.name() + "'");
+  double new_value = candidate_value;
+  if (!model_var.try_normalize_value(new_value))
+  {
+    std::ostringstream oss;
+    oss << p_source << " violates variable domain for '"
+        << model_var.name() << "': current=" << old_value
+        << ", delta=" << p_delta << ", candidate=" << candidate_value;
+    throw Solver_Error(oss.str());
+  }
+  return new_value;
+}
+
+void Local_Search::apply_checked_move(size_t p_var_idx,
+                                      double p_delta,
+                                      const char* p_source)
+{
+  if (p_var_idx == SIZE_MAX || p_delta == 0)
+    return;
+  const double new_value =
+      checked_move_value(p_var_idx, p_delta, p_source);
+  const double old_value = m_var_current_value[p_var_idx];
+  apply_move(p_var_idx, new_value - old_value);
+}
+
 bool Local_Search::verify_solution() const
 {
-  for (size_t var_idx = 0; var_idx < m_var_num; var_idx++)
-  {
-    auto& model_var = m_model_manager->var(var_idx);
-    if (!model_var.in_bound(m_var_best_value[var_idx]))
-    {
-      printf("c var %s is out of bound: %.15g\n",
-             model_var.name().c_str(),
-             m_var_best_value[var_idx]);
-      return false;
-    }
-  }
+  if (!verify_domain_values(m_var_best_value))
+    return false;
   for (size_t con_idx = 1; con_idx < m_con_num; ++con_idx)
   {
     auto& model_con = m_model_manager->con(con_idx);
@@ -432,8 +515,18 @@ bool Local_Search::verify_solution() const
 
 void Local_Search::write_sol() const
 {
+  if (!m_is_found_feasible || !verify_solution())
+  {
+    printf("o refusing to write an invalid solution.\n");
+    return;
+  }
   printf("c best-found solution is written to %s\n", m_sol_path.c_str());
   FILE* sol_file = fopen(m_sol_path.c_str(), "w");
+  if (sol_file == nullptr)
+  {
+    printf("o cannot open solution file %s.\n", m_sol_path.c_str());
+    return;
+  }
   fprintf(
       sol_file, "%-50s        %s\n", "Variable name", "Variable value");
   for (size_t var_idx = 0; var_idx < m_var_num; var_idx++)
@@ -484,15 +577,14 @@ void Local_Search::init_data()
   m_con_activity.resize(m_con_num, 0.0);
   for (size_t con_idx = 1; con_idx < m_con_num; con_idx++)
     m_con_constant[con_idx] = m_model_manager->con(con_idx).rhs();
-  [[maybe_unused]] auto& model_obj = m_model_manager->obj();
   if (m_explore_neighbor_list.empty())
   {
     m_explore_neighbor_list = {
         Neighbor("unsat_mtm_bm", m_bms_unsat_con, m_bms_mtm_unsat_op),
         Neighbor("sat_mtm", m_bms_sat_con, m_bms_mtm_sat_op),
-        Neighbor("flip", -1, m_bms_flip_op),
-        Neighbor("easy", -1, m_bms_easy_op),
-        Neighbor("unsat_mtm_bm_random", -1, m_bms_random_op)};
+        Neighbor("flip", SIZE_MAX, m_bms_flip_op),
+        Neighbor("easy", SIZE_MAX, m_bms_easy_op),
+        Neighbor("unsat_mtm_bm_random", SIZE_MAX, m_bms_random_op)};
   }
 }
 
@@ -565,6 +657,13 @@ bool Local_Search::solve_objective_only()
       }
       value = upper;
     }
+    if (!model_var.try_normalize_value(value))
+    {
+      std::ostringstream oss;
+      oss << "objective-only solution violates variable domain for '"
+          << model_var.name() << "': value=" << value;
+      throw Solver_Error(oss.str());
+    }
     m_var_current_value[var_idx] = value;
     m_var_best_value[var_idx] = value;
     best_obj += coeff * value;
@@ -577,6 +676,72 @@ bool Local_Search::solve_objective_only()
   return true;
 }
 
+void Local_Search::normalize_domain_values(std::vector<double>& p_values,
+                                           const char* p_source) const
+{
+  if (p_values.size() != m_var_num)
+    throw Solver_Error(std::string(p_source) +
+                       " size does not match variable count");
+  for (size_t var_idx = 0; var_idx < m_var_num; ++var_idx)
+  {
+    const auto& model_var = m_model_manager->var(var_idx);
+    const double original_value = p_values[var_idx];
+    double normalized_value = original_value;
+    if (!model_var.try_normalize_value(normalized_value))
+    {
+      std::ostringstream oss;
+      oss << p_source << " violates variable domain for '"
+          << model_var.name() << "': value=" << original_value
+          << ", bounds=[" << model_var.lower_bound() << ", "
+          << model_var.upper_bound() << "]";
+      if (model_var.requires_integrality())
+        oss << ", integer variable";
+      throw Solver_Error(oss.str());
+    }
+    p_values[var_idx] = normalized_value;
+  }
+}
+
+bool Local_Search::verify_domain_values(
+    const std::vector<double>& p_values) const
+{
+  if (p_values.size() != m_var_num)
+  {
+    printf("c solution size[%zu] != variable count[%zu]\n",
+           p_values.size(),
+           m_var_num);
+    return false;
+  }
+  for (size_t var_idx = 0; var_idx < m_var_num; ++var_idx)
+  {
+    const auto& model_var = m_model_manager->var(var_idx);
+    const double value = p_values[var_idx];
+    if (!std::isfinite(value))
+    {
+      printf("c var %s has non-finite value: %.15g\n",
+             model_var.name().c_str(),
+             value);
+      return false;
+    }
+    if (!model_var.in_bound(value))
+    {
+      printf("c var %s is out of bound: %.15g\n",
+             model_var.name().c_str(),
+             value);
+      return false;
+    }
+    if (model_var.requires_integrality() &&
+        !is_integral_within_tolerance(value))
+    {
+      printf("c integer var %s has fractional value: %.15g\n",
+             model_var.name().c_str(),
+             value);
+      return false;
+    }
+  }
+  return true;
+}
+
 Local_Search::Local_Search(const Model_Manager* p_model_manager)
     : m_model_manager(p_model_manager),
       m_con_is_equality(p_model_manager->con_is_equality()),
@@ -586,7 +751,7 @@ Local_Search::Local_Search(const Model_Manager* p_model_manager)
       m_activity_hits(0), m_cur_step(0), m_tabu_base(4),
       m_tabu_variation(7), m_is_found_feasible(false),
       m_current_obj_breakthrough(false), m_last_improve_step(0),
-      m_bms_unsat_con(12), m_bms_mtm_unsat_op(2250), m_bms_sat_con(1),
+      m_bms_unsat_con(10), m_bms_mtm_unsat_op(2250), m_bms_sat_con(1),
       m_bms_mtm_sat_op(80), m_bms_flip_op(0), m_bms_easy_op(5),
       m_bms_random_op(250), m_best_obj(k_inf),
       m_logged_obj_value(std::numeric_limits<double>::quiet_NaN()),
@@ -648,9 +813,9 @@ Local_Search::Local_Search(const Model_Manager* p_model_manager)
 Local_Search::~Local_Search()
 {
 }
-void Local_Search::terminate()
+void Local_Search::terminate() noexcept
 {
-  m_terminated = true;
+  m_terminated.store(true, std::memory_order_relaxed);
 }
 
 void Local_Search::set_sol_path(const std::string& p_sol_path)
@@ -797,9 +962,9 @@ void Local_Search::reset_default_neighbor_list()
   m_explore_neighbor_list = {
       Neighbor("unsat_mtm_bm", m_bms_unsat_con, m_bms_mtm_unsat_op),
       Neighbor("sat_mtm", m_bms_sat_con, m_bms_mtm_sat_op),
-      Neighbor("flip", -1, m_bms_flip_op),
-      Neighbor("easy", -1, m_bms_easy_op),
-      Neighbor("unsat_mtm_bm_random", -1, m_bms_random_op)};
+      Neighbor("flip", SIZE_MAX, m_bms_flip_op),
+      Neighbor("easy", SIZE_MAX, m_bms_easy_op),
+      Neighbor("unsat_mtm_bm_random", SIZE_MAX, m_bms_random_op)};
 }
 
 void Local_Search::set_tabu_base(size_t p_value)
