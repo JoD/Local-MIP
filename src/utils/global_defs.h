@@ -18,7 +18,6 @@
 #include <cmath>
 #include <limits>
 #include <stdlib.h>
-#include <sys/time.h>
 
 #ifdef DEBUG
 #define D_P(...) printf(__VA_ARGS__)
