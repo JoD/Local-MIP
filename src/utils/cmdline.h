@@ -36,7 +36,9 @@
 #include <typeinfo>
 #include <cstring>
 #include <algorithm>
-#include <cxxabi.h>
+#ifdef __GNUC__
+#include <cxxabi.h>  // GCC/Clang mangle typeid().name(); MSVC does not
+#endif
 #include <cstdlib>
 
 namespace cmdline{
@@ -104,11 +106,16 @@ Target lexical_cast(const Source &arg)
 
 static inline std::string demangle(const std::string &name)
 {
+#ifdef __GNUC__
   int status=0;
   char *p=abi::__cxa_demangle(name.c_str(), 0, 0, &status);
   std::string ret(p);
   free(p);
   return ret;
+#else
+  // MSVC's typeid().name() is already the human-readable spelling, so there is nothing to undo.
+  return name;
+#endif
 }
 
 template <class T>
